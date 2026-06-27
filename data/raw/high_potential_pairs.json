@@ -1,0 +1,38 @@
+[
+  {
+    "topic_name": "多专业协同平台",
+    "pairs": [{"ipc1": "G06F", "ipc2": "E04G", "prob": 0.82}]
+  },
+  {
+    "topic_name": "参数化与生成式设计",
+    "pairs": [{"ipc1": "G06F", "ipc2": "G06N", "prob": 0.78}]
+  },
+  {
+    "topic_name": "机器人集群协同",
+    "pairs": [{"ipc1": "B25J", "ipc2": "E04G", "prob": 0.85}, {"ipc1": "B25J", "ipc2": "G05B", "prob": 0.73}]
+  },
+  {
+    "topic_name": "施工全过程数字孪生",
+    "pairs": [{"ipc1": "G06F", "ipc2": "G05B", "prob": 0.79}]
+  },
+  {
+    "topic_name": "智能规范审查",
+    "pairs": [{"ipc1": "G06N", "ipc2": "G06F", "prob": 0.88}]
+  },
+  {
+    "topic_name": "建筑工程大模型技术",
+    "pairs": [{"ipc1": "G06N", "ipc2": "G06F", "prob": 0.91}]
+  },
+  {
+    "topic_name": "装配式建筑技术",
+    "pairs": [{"ipc1": "E04B", "ipc2": "B28B", "prob": 0.76}]
+  },
+  {
+    "topic_name": "建筑规模增材制造",
+    "pairs": [{"ipc1": "B33Y", "ipc2": "B28B", "prob": 0.84}]
+  },
+  {
+    "topic_name": "模块化与可重构设计",
+    "pairs": [{"ipc1": "E04B", "ipc2": "E04G", "prob": 0.68}]
+  }
+]
