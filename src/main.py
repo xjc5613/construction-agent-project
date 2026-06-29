@@ -5,8 +5,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.utils.logger import setup_logger
 from src.data_preparation.build_round1_inputs import build_round1_inputs
-from src.llm_orchestrator import run_round1, run_round2, run_round3
+from src.llm_orchestrator import run_round1, run_round2, run_round3, run_all_topics_roadmap
+from src.report.per_topic_roadmap_report import save_per_topic_reports
 from src.report_generator import generate_final_report
+from config.settings import ENABLE_PER_TOPIC_ROADMAP
 
 logger = setup_logger("main")
 
@@ -30,8 +32,17 @@ def main():
     logger.info("步骤4: 执行第三轮预测（路线图）")
     round3_result = run_round3(round1_results, round2_result, force_rerun=False)
 
-    logger.info("步骤5: 生成最终报告")
-    generate_final_report(round1_results, round2_result, round3_result)
+    roadmaps = []
+    if ENABLE_PER_TOPIC_ROADMAP:
+        logger.info("步骤5: 生成分主题技术路线图")
+        roadmaps = run_all_topics_roadmap(round1_results, force_rerun=False)
+        save_per_topic_reports(roadmaps)
+        logger.info(f"分主题路线图生成完成，共 {len(roadmaps)} 个主题")
+        logger.info("步骤6: 生成最终报告")
+    else:
+        logger.info("步骤5: 生成最终报告")
+
+    generate_final_report(round1_results, round2_result, round3_result, roadmaps=roadmaps)
 
     logger.info("===== 所有任务完成 =====")
 
