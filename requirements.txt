@@ -1,3 +1,4 @@
 python-dotenv==1.0.0
 requests==2.31.0
 jsonschema==4.20.0
+SciencePlots==2.2.2
