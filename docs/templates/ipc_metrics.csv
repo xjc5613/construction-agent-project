@@ -1,0 +1,4 @@
+ipc_code,year,patent_count,degree_centrality,betweenness_centrality,growth_rate
+E04B,2023,120,0.18,0.07,0.12
+E04B,2024,142,0.21,0.08,0.1833
+E04B,2025,168,0.25,0.10,0.1831

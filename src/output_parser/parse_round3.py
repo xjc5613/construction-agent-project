@@ -189,8 +189,12 @@ def _parse_enhanced_format(line: str) -> Optional[Dict[str, Any]]:
         "description": description,
         "trl_level": trl_level,
         "impact_scope": impact_scope,
-        "uncertainty_level": uncertainty_level,
-        "dependencies": dependencies
+          "uncertainty_level": uncertainty_level,
+          "dependencies": dependencies,
+          "evidence_ids": [],
+          "assumptions": [],
+          "confidence": None,
+          "uncertainty_reason": ""
     }
 
 
@@ -214,8 +218,12 @@ def _parse_legacy_format(line: str) -> Optional[Dict[str, Any]]:
         "description": desc,
         "trl_level": trl_level,
         "impact_scope": impact_scope,
-        "uncertainty_level": uncertainty_level,
-        "dependencies": dependencies or []
+          "uncertainty_level": uncertainty_level,
+          "dependencies": dependencies or [],
+          "evidence_ids": [],
+          "assumptions": [],
+          "confidence": None,
+          "uncertainty_reason": ""
     }
 
 
@@ -274,6 +282,12 @@ def _extract_json_roadmap_and_reasoning(text: str) -> tuple:
                                 parsed_item["uncertainty_level"] = item["uncertainty_level"]
                             if "dependencies" in item:
                                 parsed_item["dependencies"] = item["dependencies"]
+                            for field in (
+                                "evidence_ids", "assumptions", "confidence",
+                                "uncertainty_reason", "evidence_conflicts"
+                            ):
+                                if field in item:
+                                    parsed_item[field] = item[field]
                             roadmap_items.append(parsed_item)
                         except (ValueError, TypeError):
                             pass
@@ -281,7 +295,13 @@ def _extract_json_roadmap_and_reasoning(text: str) -> tuple:
     return roadmap_items, reasoning_chain
 
 
-def parse_round3_output(raw_response: str) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+def parse_round3_output(raw_response: Optional[str]) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+    """Parse roadmap output while preserving the legacy list contract by default.
+
+    When ``ENABLE_REASONING_CHAIN`` is enabled, the parser returns both the
+    roadmap items and the structured chain. The default mode intentionally
+    returns only the list so existing round-three callers remain compatible.
+    """
     json_roadmap_items, reasoning_chain = _extract_json_roadmap_and_reasoning(raw_response)
     
     if json_roadmap_items:

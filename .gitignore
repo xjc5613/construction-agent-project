@@ -5,4 +5,13 @@ __pycache__/
 logs/
 outputs/
 data/processed/
+data/workbench/
+var/
+.tools/
+frontend/node_modules/
+frontend/dist/
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+*.db
 .DS_Store
