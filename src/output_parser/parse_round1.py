@@ -150,6 +150,11 @@ def parse_round1_output(raw_response: str, topic_name: str) -> Optional[Dict[str
             data[key] = []
     data.setdefault("fusion_scenario", "")
     data.setdefault("typical_day_2040", "")
+    data.setdefault("ipc_inference", [])
+    data.setdefault("paper_inference", [])
+    data.setdefault("evidence_synthesis", [])
+    data.setdefault("evidence_conflicts", [])
+    data.setdefault("evidence_ids", [])
     
     if ENABLE_REASONING_CHAIN:
         raw_reasoning = data.get("reasoning_chain", [])

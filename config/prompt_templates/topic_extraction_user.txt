@@ -1,0 +1,17 @@
+研究文档：
+{document}
+
+规则抽取的候选主题：
+{candidates}
+
+请校正候选主题名称和关键词，但不得创建没有来源证据的新主题。输出严格JSON：
+{{
+  "topics": [
+    {{
+      "topic_id": "原topic_id",
+      "topic_name": "校正后的主题名称",
+      "keywords": ["关键词"],
+      "requires_review": false
+    }}
+  ]
+}}

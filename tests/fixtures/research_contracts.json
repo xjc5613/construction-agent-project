@@ -1,0 +1,40 @@
+{
+  "legacy_project": {
+    "project_id": "project_legacy_2026",
+    "research_contract_version": 2,
+    "baseline_year": 2026,
+    "target_year": 2040,
+    "periods": ["2010_2015", "2016_2020", "2021_2026"]
+  },
+  "version_3_project": {
+    "project_id": "project_v3_2025",
+    "research_contract_version": 3,
+    "baseline_year": 2025,
+    "target_year": 2040,
+    "periods": ["2010_2014", "2015_2019", "2020_2025"],
+    "data_cutoff": "2025-10-01",
+    "incomplete_years": [2025]
+  },
+  "mapped_dataset": {
+    "dataset_id": "dataset_mapped",
+    "migration_status": "mapped",
+    "period_code": "2020_2025"
+  },
+  "unmapped_dataset": {
+    "dataset_id": "dataset_unmapped",
+    "migration_status": "needs_mapping",
+    "period_code": "2020_2025"
+  },
+  "partial_result": {
+    "job_id": "job_partial",
+    "status": "partial_failed",
+    "result_available": true
+  },
+  "completed_legacy_snapshot": {
+    "job_id": "job_legacy_completed",
+    "status": "completed",
+    "research_contract_version": 2,
+    "baseline_year": 2026,
+    "historical_periods": ["2010_2015", "2016_2020", "2021_2026"]
+  }
+}

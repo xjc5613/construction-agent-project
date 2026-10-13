@@ -47,6 +47,9 @@ def parse_round2_output(raw_response: str) -> Optional[Dict[str, str]]:
             )
         else:
             result["reasoning_chain"] = []
+        result["evidence_synthesis"] = json_data.get("evidence_synthesis", [])
+        result["evidence_conflicts"] = json_data.get("evidence_conflicts", [])
+        result["evidence_ids"] = json_data.get("evidence_ids", [])
         
         if "new_paradigm_name" in result and "new_paradigm_description" in result:
             return result

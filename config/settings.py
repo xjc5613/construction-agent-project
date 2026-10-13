@@ -45,9 +45,32 @@ OUTPUTS_PARSED = ROOT_DIR / "outputs" / "parsed"
 OUTPUTS_REPORT = ROOT_DIR / "outputs" / "final_report"
 LOGS_DIR = ROOT_DIR / "logs"
 PROMPT_TEMPLATES_DIR = ROOT_DIR / "config" / "prompt_templates"
+WORKBENCH_DATA_DIR = ROOT_DIR / "data" / "workbench"
+DATA_SEED_DIR = ROOT_DIR / "data" / "seed"
+DOCS_RESEARCH_DIR = ROOT_DIR / "docs" / "research"
+VAR_DIR = ROOT_DIR / "var"
+LIBRARY_DIR = VAR_DIR / "library"
+LIBRARY_RAW_DIR = LIBRARY_DIR / "raw"
+LIBRARY_PARSED_DIR = LIBRARY_DIR / "parsed"
+LIBRARY_INDEX_DIR = LIBRARY_DIR / "index"
+LIBRARY_DB_PATH = LIBRARY_INDEX_DIR / "library.sqlite3"
+PROJECTS_DIR = VAR_DIR / "projects"
+JOBS_DIR = VAR_DIR / "jobs"
+EXPORTS_DIR = VAR_DIR / "exports"
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", 25 * 1024 * 1024))
+MAX_TABLE_ROWS = int(os.getenv("MAX_TABLE_ROWS", 100_000))
+MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", 500))
+ENABLE_WORKBENCH_API = _str_to_bool(os.getenv("ENABLE_WORKBENCH_API"), True)
+WORKBENCH_DEFAULT_TIME_NODES = _parse_json_env(
+    os.getenv("WORKBENCH_DEFAULT_TIME_NODES"), ["2030", "2035", "2040"]
+)
 
 # 创建目录
-for dir_path in [DATA_PROCESSED, OUTPUTS_RAW, OUTPUTS_PARSED, OUTPUTS_REPORT, LOGS_DIR]:
+for dir_path in [
+    DATA_PROCESSED, OUTPUTS_RAW, OUTPUTS_PARSED, OUTPUTS_REPORT, LOGS_DIR,
+    DATA_SEED_DIR, DOCS_RESEARCH_DIR, LIBRARY_RAW_DIR,
+    LIBRARY_PARSED_DIR, LIBRARY_INDEX_DIR, PROJECTS_DIR, JOBS_DIR, EXPORTS_DIR,
+]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
 # ===== 功能开关 =====

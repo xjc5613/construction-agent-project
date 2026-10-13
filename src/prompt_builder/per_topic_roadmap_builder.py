@@ -1,4 +1,5 @@
 # -*- coding:utf-8-*-
+import json
 from typing import Dict, Any, List
 from config.settings import PROMPT_TEMPLATES_DIR
 from src.utils.file_io import read_text
@@ -36,6 +37,25 @@ def build_per_topic_roadmap_messages(topic_data: Dict[str, Any]) -> list:
         fusion_scenario=fusion_scenario if fusion_scenario else "无",
         typical_day=typical_day if typical_day else "无"
     )
+    evidence_context = {
+        "ipc_inference": topic_data.get("ipc_inference", []),
+        "paper_inference": topic_data.get("paper_inference", []),
+        "evidence_synthesis": topic_data.get("evidence_synthesis", []),
+        "evidence_conflicts": topic_data.get("evidence_conflicts", []),
+        "evidence_ids": topic_data.get("evidence_ids", []),
+        "forecast_context": topic_data.get("_forecast_context", {}),
+    }
+    user += (
+        "\n\n=== 证据上下文 ===\n"
+        + json.dumps(evidence_context, ensure_ascii=False)
+        + "\n每个里程碑额外输出 evidence_ids、assumptions、confidence、"
+          "uncertainty_reason，不得隐藏 IPC 与论文证据冲突。"
+    )
+    if topic_data.get("_forecast_context"):
+        user += (
+            "\n路线图以 forecast_context.baseline_year 为基线，只输出其中的 "
+            "forecast_nodes，不得生成目标年份之后的阶段。"
+        )
 
     return [
         {"role": "system", "content": system},

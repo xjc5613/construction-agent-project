@@ -120,6 +120,128 @@ cp .env.example .env
 python -m src.main
 ```
 
+### 交互式技术预测工作台
+
+工作台将长期基础数据与本次预测材料分离管理。IPC时间序列和论文数据进入版本化证据库；本次材料用于定义研究范围和候选主题。主题确认后，系统同时检索IPC与论文证据、冻结证据快照，再复用现有三轮预测和分主题路线图能力。
+
+工作台是一个独立的前后端应用：
+
+| 服务 | 技术栈 | 地址 |
+|------|--------|------|
+| 后端 API | FastAPI + Uvicorn | `http://127.0.0.1:8000` |
+| 前端 | React + TypeScript + Vite | `http://127.0.0.1:5173` |
+
+#### 首次准备
+
+在项目根目录执行：
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env` 并设置真实的 `DEEPSEEK_API_KEY`。随后执行：
+
+```bash
+chmod +x scripts/bootstrap_node.sh scripts/workbench.sh
+./scripts/workbench.sh setup
+```
+
+`setup` 会执行以下操作：
+
+1. 检测项目本地 `.tools/node`；缺失时从 Node.js 官方源下载并校验适配当前系统的 Node.js。
+2. 安装 `requirements.txt` 中的 FastAPI、Uvicorn 与预测系统 Python 依赖。
+3. 使用 `frontend/package-lock.json` 安装 React、Vite、ECharts 前端依赖。
+4. 非破坏迁移固定主题和样例摘要到 `data/seed/`。
+5. 初始化 `var/library/index/library.sqlite3`，导入内置兼容数据并创建 `legacy-default` 迁移项目。
+
+#### 启动前后端
+
+```bash
+./scripts/workbench.sh start
+```
+
+该命令会同时启动 FastAPI 与 Vite。浏览器打开 `http://127.0.0.1:5173`，前端默认调用 `http://127.0.0.1:8000/api`。
+
+需要分别调试时，使用两个终端：
+
+```bash
+./scripts/workbench.sh backend
+```
+
+```bash
+./scripts/workbench.sh frontend
+```
+
+#### 验证与构建
+
+```bash
+./scripts/workbench.sh check
+./scripts/workbench.sh build
+```
+
+`check` 执行工作台 API 测试和前端生产构建；`build` 输出 Vite 生产包到 `frontend/dist/`。
+
+#### 常见问题
+
+- `DEEPSEEK_API_KEY 未设置`：检查 `.env` 中的密钥是否为空。
+- `npm: command not found`：先执行 `./scripts/workbench.sh setup`，脚本会准备项目本地 Node.js。
+- 前端显示“未连接”：确认 API 服务正在 `127.0.0.1:8000` 运行，并检查前端右上角 API 地址。
+- 图表资产未生成：预测配置中需要启用“分主题路线图”；图片保存在任务资产目录并通过受控 API 访问。
+- 论文 PDF 显示“待复核”：通常表示文件是扫描件或文本覆盖率过低，需要提供 OCR 文本。
+- 启动预测提示证据不足：补充至少一个覆盖三年的 IPC 序列和相关论文，或填写人工覆盖理由。
+
+工作流为：维护技术目录 → 按三级技术导入并查看基础记录 → 选择一级技术与目标年份新建项目 → 在项目概览检查数据覆盖 → 输入研究材料 → 在同一页面完成主题校准与证据审阅 → 冻结技术和数据范围 → 累计节点预测 → 结果与任务历史。
+
+未进入项目时侧栏只显示工作台、技术目录、基础数据和预测项目；进入项目后才显示项目概览、研究材料、主题与证据、预测运行、结果与历史。新项目以2026为基线：目标2030输出2030，目标2035输出2030/2035，目标2040输出2030/2035/2040；历史任务仍按原快照显示。详细流程、范围规则和迁移步骤见 [`docs/streamlined-forecast-workflow.md`](docs/streamlined-forecast-workflow.md)。
+
+#### 基础数据格式
+
+IPC趋势表建议字段：
+
+```text
+ipc_code,year,patent_count,degree_centrality,betweenness_centrality,growth_rate
+```
+
+IPC融合表建议字段：
+
+```text
+ipc1,ipc2,year,probability
+```
+
+论文元数据表建议字段：
+
+```text
+title,authors,year,doi,keywords,abstract
+```
+
+支持 `.csv`、`.xlsx`、`.json` 表格和 `.pdf`、`.docx`、`.txt`、`.md` 文档。用户选择三级技术和数据类型后直接上传；系统预览字段、错误行和阶段拆分计划，并自动生成底层数据集版本。当前 IPC 列表展示年度聚合专利指标，不包含逐件专利题名、申请人或申请号。
+可直接使用的 CSV 模板、字段约束、备份恢复和导入故障排查见
+[`docs/data-import.md`](docs/data-import.md)。
+技术目录、三阶段数据、累计预测节点和迁移规则见
+[`docs/technology-taxonomy-stage-forecasting.md`](docs/technology-taxonomy-stage-forecasting.md)。
+
+#### 数据目录与备份
+
+- `data/seed/`：Git跟踪的兼容演示数据。
+- `var/library/`：基础库原文件、解析文本和SQLite索引。
+- `var/projects/`：预测项目材料。
+- `var/jobs/`：任务中间产物、证据快照和结果资产。
+- `var/exports/`：导出报告。
+
+备份时至少复制 `var/library/`、`var/projects/` 和任务目录。资源迁移默认只预览：
+
+```bash
+python3 scripts/migrate_resources.py
+python3 scripts/migrate_resources.py --apply
+python3 scripts/seed_library.py --include-legacy-project
+python3 scripts/migrate_taxonomy_stage_data.py
+python3 scripts/migrate_taxonomy_stage_data.py --apply
+python3 scripts/inventory_workflow_data.py \
+  --output var/migration/streamlined-workflow-inventory.json
+```
+
+迁移脚本只复制和校验文件，不删除旧数据。详细目录责任见 `docs/resource-layout.md`。
+
 ### 强制重新运行（忽略缓存）
 
 ```python
@@ -199,6 +321,16 @@ outputs/
 | 🔴 低置信 | <60% | 预测结果分歧较大，需谨慎参考 |
 
 ## 测试
+
+工作台的生命周期、证据门禁、任务恢复与浏览器验收说明见
+[`docs/workbench-hardening.md`](docs/workbench-hardening.md)。前端端到端测试使用模拟
+API，不会调用付费模型：
+
+```bash
+cd frontend
+npm run test:e2e:install
+npm run test:e2e
+```
 
 ### 运行所有测试
 

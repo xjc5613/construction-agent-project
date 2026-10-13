@@ -17,10 +17,9 @@ from src.llm_orchestrator.per_topic_roadmap_runner import (
 from src.report.per_topic_roadmap_report import (
     generate_single_topic_report,
     generate_all_topics_report,
+    generate_topic_analysis_file,
     save_per_topic_reports,
     _get_uncertainty_cn,
-    _build_timeline,
-    _build_flowchart,
 )
 from config import settings
 
@@ -607,73 +606,23 @@ def test_single_topic_report_contains_title():
 
 def test_single_topic_report_contains_timeline():
     report = generate_single_topic_report(SAMPLE_ROADMAP_DATA)
-    assert "## 时间轴视图" in report
-    assert "```mermaid" in report
-    assert "timeline" in report
-
+    assert "### 1.2 时间轴路线图" in report
 
 def test_single_topic_report_contains_flowchart():
     report = generate_single_topic_report(SAMPLE_ROADMAP_DATA)
-    assert "## 流程图视图" in report
-    assert "flowchart TD" in report
-
+    assert "技术网络分析" not in report
+    assert "### 1.3 综合能力雷达图" in report
 
 def test_single_topic_report_contains_tables():
     report = generate_single_topic_report(SAMPLE_ROADMAP_DATA)
-    assert "## 分阶段详细里程碑" in report
-    assert "| 里程碑 | 描述 | 关键技术 | TRL等级 | 不确定性 | 依赖 |" in report
-
+    assert "## 三、分阶段详细里程碑" in report
+    assert "| 里程碑 | 详细描述 | 关键技术 | TRL |" in report
 
 def test_single_topic_report_contains_statistics():
     report = generate_single_topic_report(SAMPLE_ROADMAP_DATA)
-    assert "统计信息" in report
-    assert "总里程碑数量" in report
-    assert "各阶段里程碑数量" in report
-
-
-def test_mermaid_timeline_syntax():
-    timeline = _build_timeline(SAMPLE_ROADMAP_DATA, "测试主题")
-    assert timeline.startswith("```mermaid")
-    assert "timeline" in timeline
-    assert "title 测试主题 技术发展路线图" in timeline
-    assert "2025" in timeline
-    assert "2030" in timeline
-    assert "2035" in timeline
-    assert "2040" in timeline
-    assert timeline.strip().endswith("```")
-
-
-def test_mermaid_timeline_contains_milestones():
-    timeline = _build_timeline(SAMPLE_ROADMAP_DATA, "参数化与生成式设计")
-    assert "参数化设计工具普及" in timeline
-    assert "生成式设计算法验证" in timeline
-    assert "性能仿真闭环优化" in timeline
-    assert "端到端自主设计系统" in timeline
-
-
-def test_mermaid_flowchart_syntax():
-    flowchart = _build_flowchart(SAMPLE_ROADMAP_DATA)
-    assert flowchart.startswith("```mermaid")
-    assert "flowchart TD" in flowchart
-    assert "subgraph" in flowchart
-    assert "2025年" in flowchart
-    assert "2030年" in flowchart
-    assert flowchart.strip().endswith("```")
-
-
-def test_mermaid_flowchart_contains_nodes():
-    flowchart = _build_flowchart(SAMPLE_ROADMAP_DATA)
-    assert "参数化设计工具普及" in flowchart
-    assert "生成式设计算法验证" in flowchart
-    assert "TRL-3" in flowchart
-    assert "TRL-5" in flowchart
-    assert "TRL-9" in flowchart
-
-
-def test_mermaid_flowchart_dependencies():
-    flowchart = _build_flowchart(SAMPLE_ROADMAP_DATA)
-    assert "-->" in flowchart
-
+    assert "核心指标" in report
+    assert "里程碑总数" in report
+    assert "各阶段分布" in report
 
 def test_all_topics_report_contains_title():
     roadmaps = [SAMPLE_ROADMAP_DATA]
@@ -681,14 +630,13 @@ def test_all_topics_report_contains_title():
     assert "# 智能建造2040 - 分主题技术路线图" in report
     assert "生成时间" in report
 
-
 def test_all_topics_report_contains_index():
     roadmaps = [
         {"topic_name": "主题A", "roadmap": SAMPLE_ROADMAP_JSON},
         {"topic_name": "主题B", "roadmap": SAMPLE_ROADMAP_JSON},
     ]
     report = generate_all_topics_report(roadmaps)
-    assert "## 目录" in report
+    assert "### 主题索引" in report
     assert "主题A" in report
     assert "主题B" in report
 
@@ -699,9 +647,9 @@ def test_all_topics_report_contains_statistics_summary():
         {"topic_name": "主题B", "roadmap": SAMPLE_ROADMAP_JSON},
     ]
     report = generate_all_topics_report(roadmaps)
-    assert "统计汇总" in report
-    assert "总主题数" in report
-    assert "总里程碑数" in report
+    assert "执行摘要" in report
+    assert "分析主题数" in report
+    assert "里程碑总数" in report
     assert "2" in report
 
 
@@ -737,7 +685,7 @@ def test_empty_roadmap_data():
     empty_data = {"topic_name": "空主题", "roadmap": {}}
     report = generate_single_topic_report(empty_data)
     assert "# 空主题" in report
-    assert "总里程碑数量" in report
+    assert "里程碑总数" in report
     assert "0" in report
 
 
@@ -767,31 +715,9 @@ def test_partial_milestone_fields():
     assert "中" in report
 
 
-def test_milestone_without_dependencies_default_connection():
-    data = {
-        "topic_name": "无依赖测试",
-        "roadmap": {
-            "2025": {
-                "stage_description": "",
-                "milestones": [
-                    {"name": "里程碑A", "description": "desc", "key_technologies": [], "trl_level": 2, "dependencies": [], "uncertainty_level": "low"}
-                ]
-            },
-            "2030": {
-                "stage_description": "",
-                "milestones": [
-                    {"name": "里程碑B", "description": "desc", "key_technologies": [], "trl_level": 4, "dependencies": [], "uncertainty_level": "low"}
-                ]
-            }
-        }
-    }
-    flowchart = _build_flowchart(data)
-    assert "-->" in flowchart
-
-
 def test_stage_description_in_overview():
     report = generate_single_topic_report(SAMPLE_ROADMAP_DATA)
-    assert "概述" in report
+    assert "阶段定位" in report
     assert "基础技术积累阶段" in report
 
 
@@ -816,10 +742,20 @@ def test_end_to_end_single_topic():
 
     report = generate_single_topic_report(parsed)
     assert "# 参数化与生成式设计" in report
-    assert "时间轴视图" in report
-    assert "流程图视图" in report
+    assert "时间轴路线图" in report
+    assert "技术网络分析" not in report
+    assert "综合能力雷达图" in report
     assert "分阶段详细里程碑" in report
-    assert "统计信息" in report
+    assert "核心指标" in report
+
+
+def test_topic_analysis_file_contains_scientific_sections():
+    analysis = generate_topic_analysis_file(SAMPLE_ROADMAP_DATA, {}, [])
+    assert "# 参数化与生成式设计：图表、指标与评估结果解读" in analysis
+    assert "## 图表解读" in analysis
+    assert "## 量化指标" in analysis
+    assert "## 回测评估结果" in analysis
+    assert "平均TRL" in analysis
 
 
 NINE_TOPICS = [
@@ -871,7 +807,7 @@ def test_end_to_end_all_nine_topics():
 
     all_report = generate_all_topics_report(results)
     assert "# 智能建造2040 - 分主题技术路线图" in all_report
-    assert "统计汇总" in all_report
+    assert "执行摘要" in all_report
     assert "9" in all_report
     for topic_name in NINE_TOPICS:
         assert topic_name in all_report

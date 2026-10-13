@@ -57,7 +57,11 @@ def _normalize_stage_data(stage_data: Any) -> Optional[Dict[str, Any]]:
             "key_technologies": ms.get("key_technologies") or ms.get("关键技术") or [],
             "trl_level": ms.get("trl_level") or ms.get("TRL等级") or ms.get("技术就绪水平"),
             "dependencies": ms.get("dependencies") or ms.get("依赖") or [],
-            "uncertainty_level": ms.get("uncertainty_level") or ms.get("不确定性等级") or "medium"
+            "uncertainty_level": ms.get("uncertainty_level") or ms.get("不确定性等级") or "medium",
+            "evidence_ids": ms.get("evidence_ids") or ms.get("证据引用") or [],
+            "assumptions": ms.get("assumptions") or ms.get("假设") or [],
+            "confidence": ms.get("confidence") or ms.get("置信度"),
+            "uncertainty_reason": ms.get("uncertainty_reason") or ms.get("不确定性原因") or "",
         }
 
         if isinstance(milestone["trl_level"], str):
@@ -74,6 +78,10 @@ def _normalize_stage_data(stage_data: Any) -> Optional[Dict[str, Any]]:
 
         if not isinstance(milestone["dependencies"], list):
             milestone["dependencies"] = []
+        if not isinstance(milestone["evidence_ids"], list):
+            milestone["evidence_ids"] = []
+        if not isinstance(milestone["assumptions"], list):
+            milestone["assumptions"] = [str(milestone["assumptions"])]
 
         if milestone["uncertainty_level"] not in ("low", "medium", "high"):
             unc_map = {"低": "low", "中": "medium", "高": "high"}
@@ -110,7 +118,7 @@ def parse_per_topic_roadmap_output(raw_text: str, topic_name: str = "") -> Dict[
             break
 
     if roadmap_data is None and isinstance(data, dict):
-        stage_keys = ["2025", "2030", "2035", "2040"]
+        stage_keys = ["2025", "2026", "2030", "2035", "2040"]
         if any(k in data for k in stage_keys):
             roadmap_data = data
 
@@ -119,7 +127,7 @@ def parse_per_topic_roadmap_output(raw_text: str, topic_name: str = "") -> Dict[
             roadmap_data = data
 
     if isinstance(roadmap_data, list):
-        stage_order = ["2025", "2030", "2035", "2040"]
+        stage_order = ["2026", "2030", "2035", "2040"]
         mapped = {}
         for i, stage_item in enumerate(roadmap_data[:4]):
             if i < len(stage_order):
@@ -138,7 +146,7 @@ def parse_per_topic_roadmap_output(raw_text: str, topic_name: str = "") -> Dict[
         return result
 
     roadmap = {}
-    stage_order = ["2025", "2030", "2035", "2040"]
+    stage_order = ["2025", "2026", "2030", "2035", "2040"]
 
     for year in stage_order:
         if year in roadmap_data:
