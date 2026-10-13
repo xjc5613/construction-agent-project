@@ -1,4 +1,5 @@
 # -*- coding:utf-8-*-
+import json
 from typing import List, Dict, Any
 from config.settings import PROMPT_TEMPLATES_DIR
 from src.utils.file_io import read_text
@@ -32,6 +33,13 @@ def build_round2_messages(round1_outputs: List[Dict[str, Any]]) -> list:
         "\n\n范式归纳必须保留 evidence_synthesis、evidence_conflicts 和 evidence_ids，"
         "明确哪些主题的 IPC 与论文证据收敛或冲突。"
     )
+    context = round1_outputs[0].get("_forecast_context", {}) if round1_outputs else {}
+    if context:
+        user += (
+            "\n\n=== 项目预测合同 ===\n"
+            + json.dumps(context, ensure_ascii=False)
+            + "\n范式归纳不得越过 target_year，且必须解释三个历史阶段如何支撑结论。"
+        )
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": user}

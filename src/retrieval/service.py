@@ -5,8 +5,10 @@ import re
 from collections import Counter
 from typing import Any, Dict, Iterable, List, Optional
 
+from src.analysis import StageAnalysisService
 from src.ingestion.service import calculate_ipc_trends
-from src.library import LibraryRepository
+from src.library import DatasetEligibilityResolver, LibraryRepository
+from src.api.readiness_service import ReadinessService
 
 IPC_PATTERN = re.compile(r"\b[A-H]\d{2}[A-Z](?:[-－]?\d{1,4})?\b", re.IGNORECASE)
 
@@ -45,36 +47,52 @@ class EvidenceRetrievalService:
             raise ValueError("项目主题不存在")
         if topic["requires_review"] or topic["status"] not in {"confirmed", "evidence_ready"}:
             raise ValueError("主题尚未确认")
+        project = self.repository.get_project(project_id)
+        if project:
+            end_year = min(end_year, int(project.get("baseline_year") or 2025))
         codes = self._topic_codes(topic)
-        dataset_ids = [item for item in (dataset_ids or []) if item]
-        ipc_rows = self.repository.ipc_series(codes, start_year, end_year)
-        if not ipc_rows and codes:
+        technology_ids = [
+            item["technology_node_id"] for item in topic.get("technologies", [])
+        ]
+        scope = DatasetEligibilityResolver(self.repository).resolve_for_topic(
+            project_id, topic,
+            requested_dataset_ids=dataset_ids if dataset_ids else None,
+        )
+        dataset_ids = scope["selected_dataset_ids"]
+        ipc_rows = self.repository.ipc_series(
+            codes, start_year, end_year, dataset_ids=dataset_ids
+        )
+        if not ipc_rows and codes and dataset_ids:
             # Imported metrics can use subclass codes while material only mentions main class.
             with self.repository.db.connect() as connection:
                 clauses = " OR ".join("m.ipc_code LIKE ?" for _ in codes)
-                values = [f"{code}%" for code in codes] + [start_year, end_year]
+                dataset_clause = ",".join("?" for _ in dataset_ids)
+                values = (
+                    [f"{code}%" for code in codes]
+                    + list(dataset_ids) + [start_year, end_year]
+                )
                 rows = connection.execute(
                     f"""SELECT m.*,d.name dataset_name,d.version dataset_version
                         FROM ipc_metrics m JOIN datasets d ON d.dataset_id=m.dataset_id
-                        WHERE d.status='published' AND ({clauses}) AND m.year>=? AND m.year<=?
+                        WHERE d.status='published' AND ({clauses})
+                        AND m.dataset_id IN ({dataset_clause})
+                        AND m.year>=? AND m.year<=?
                         ORDER BY m.ipc_code,m.year""",
                     values,
                 ).fetchall()
                 ipc_rows = [dict(row) for row in rows]
-        fusion_rows = self.repository.ipc_fusions(codes)
-        if dataset_ids:
-            ipc_rows = [
-                row for row in ipc_rows if row["dataset_id"] in dataset_ids
-            ]
-            fusion_rows = [
-                row for row in fusion_rows if row["dataset_id"] in dataset_ids
-            ]
-        search_terms = [topic["topic_name"], *topic.get("keywords", [])]
+        fusion_rows = self.repository.ipc_fusions(
+            codes, dataset_ids=dataset_ids
+        )
+        search_terms = [
+            topic["topic_name"], *topic.get("keywords", []),
+            *(item.get("name", "") for item in topic.get("technologies", [])),
+        ]
         papers_by_id: Dict[str, Dict[str, Any]] = {}
         for term in [term for term in search_terms if term][:8]:
-            for paper in self.repository.search_papers(term, paper_limit, end_year):
-                if dataset_ids and paper["dataset_id"] not in dataset_ids:
-                    continue
+            for paper in self.repository.search_papers(
+                term, paper_limit, end_year, dataset_ids=dataset_ids
+            ):
                 current = papers_by_id.get(paper["paper_id"])
                 score = self._paper_score(paper, search_terms, end_year)
                 if score >= min_relevance and (
@@ -130,11 +148,63 @@ class EvidenceRetrievalService:
                 "metadata": evidence, "relevance": 1.0,
             })
 
-        quality = self._quality(ipc_rows, papers, items)
+        stage_runs = StageAnalysisService(self.repository).latest_for_project(
+            project_id
+        )
+        selected_stage_runs = [
+            run for run in stage_runs
+            if run["technology_node_id"] in technology_ids
+        ]
+        for run in selected_stage_runs:
+            for analysis in run.get("items", []):
+                source_id = analysis["analysis_id"]
+                items.append({
+                    "evidence_id": stable_evidence_id(
+                        "stage_analysis", source_id
+                    ),
+                    "evidence_type": "stage_analysis",
+                    "source_id": source_id,
+                    "title": f"{run['technology_name']} 三阶段演化",
+                    "content": (
+                        f"IPC方向={analysis['metrics'].get('ipc_direction')}，"
+                        f"论文方向={analysis['metrics'].get('paper_direction')}，"
+                        f"关系={analysis['relation']}"
+                    ),
+                    "metadata": {
+                        **analysis, "technology_node_id": run["technology_node_id"],
+                        "algorithm_version": run["algorithm_version"],
+                        "input_checksum": run["input_checksum"],
+                    },
+                    "relevance": analysis.get("confidence", 0),
+                })
+
+        quality = ReadinessService(self.repository).evaluate_evidence_items(
+            project or {"legacy_mode": True}, topic, items
+        )
+        quality["ipc_trends"] = calculate_ipc_trends(ipc_rows) if ipc_rows else {}
         query = {
             "codes": codes, "terms": search_terms, "start_year": start_year,
             "end_year": end_year, "paper_limit": paper_limit,
             "dataset_ids": dataset_ids, "min_relevance": min_relevance,
+            "technology_node_ids": technology_ids,
+            "eligible_dataset_ids": scope["eligible_dataset_ids"],
+            "eligible_datasets": [
+                {
+                    "dataset_id": item["dataset_id"],
+                    "version": item["version"],
+                    "period_code": item["period_code"],
+                    "public_kind": item["public_kind"],
+                    "technology_node_id": item["technology_node_id"],
+                    "technology_path": item.get("technology_path", ""),
+                }
+                for item in scope["eligible_datasets"]
+            ],
+            "technologies": scope["technologies"],
+            "root_node_id": scope["root_node_id"],
+            "scope_checksum": scope["scope_checksum"],
+            "historical_periods": [
+                "2010_2015", "2016_2020", "2021_2026"
+            ],
         }
         package = self.repository.create_evidence_package(
             project_id, topic_id, query, quality, items, operator_notes
@@ -183,7 +253,8 @@ class EvidenceRetrievalService:
             missing.append("至少2篇相关论文")
         if paper_fragments < 3:
             missing.append("至少3个论文证据片段")
-        score = min(100, len(ipc_rows) * 4 + len(years) * 8 + len(papers) * 10 + paper_fragments * 5)
+        passed = [bool(ipc_rows), len(years) >= 3, len(papers) >= 2, paper_fragments >= 3]
+        score = sum(weight for weight, ok in zip((20, 25, 25, 30), passed) if ok)
         return {
             "score": score, "sufficient": not missing, "missing": missing,
             "ipc_record_count": len(ipc_rows), "year_count": len(years),

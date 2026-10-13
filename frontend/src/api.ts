@@ -1,28 +1,24 @@
-export async function apiRequest<T>(
-  apiBase: string,
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
+
+export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  if (!(init?.body instanceof FormData)) {
+  if (init?.body && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`${apiBase.replace(/\/$/, "")}${path}`, {
+  const res = await fetch(`${API_BASE.replace(/\/$/, "")}${path}`, {
     ...init,
     headers,
   });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({})) as {
-      detail?: string | { message?: string; missing?: string[] };
-    };
-    const detail = typeof payload.detail === "string"
-      ? payload.detail
-      : [payload.detail?.message, ...(payload.detail?.missing ?? [])].filter(Boolean).join("；");
-    throw new Error(detail || `请求失败 (${response.status})`);
+  if (!res.ok) {
+    let msg = `请求失败 (${res.status})`;
+    try {
+      const data = await res.json();
+      msg = data?.error?.message || data?.detail?.message || data?.detail || msg;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(typeof msg === "string" ? msg : "请求失败");
   }
-  return response.json() as Promise<T>;
-}
-
-export function assetUrl(apiBase: string, path: string): string {
-  return `${apiBase.replace(/\/api\/?$/, "")}${path}`;
+  return res.json() as Promise<T>;
 }

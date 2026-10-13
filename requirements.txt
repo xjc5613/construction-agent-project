@@ -9,3 +9,6 @@ python-multipart>=0.0.9,<1
 openpyxl>=3.1,<4
 pypdf>=5,<7
 python-docx>=1.1,<2
+# Python 3.9-compatible, mutually compatible LangChain orchestration baseline.
+langchain-core==0.3.84
+langgraph==0.2.55

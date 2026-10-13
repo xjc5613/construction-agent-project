@@ -1,0 +1,34 @@
+import { expect, test } from "@playwright/test";
+import { mockApi, project, readiness } from "./fixtures";
+
+test("mocked provider-free workflow reaches a recoverable completed result", async ({ page }) => {
+  const root = { node_id: "tech-1", parent_id: null, level: 1, name: "智能建造", slug: "smart", description: "", keywords: [], aliases: [], status: "active", effective_status: "active", sort_order: 0, taxonomy_version: 1, path_text: "智能建造", children: [] };
+  const leaf = { ...root, node_id: "tech-3", parent_id: "tech-1", level: 3, name: "模块化", path_text: "智能建造 / 装配式 / 模块化" };
+  await mockApi(page, { technologies: [root, leaf], readiness: { ...readiness, evidence: { score: 100, sufficient: true, state: "ready" }, forecast: { can_start: true, can_override: false, blocking_reasons: [], override_reasons: [], active_job_id: null } } });
+  await page.goto("/library");
+  await page.getByLabel("三级技术").selectOption("tech-3");
+  await page.locator('input[type="file"]').setInputFiles("../docs/templates/papers.csv");
+  await page.getByRole("button", { name: "解析并预览" }).click();
+  await page.getByRole("button", { name: "确认导入" }).click();
+  await expect(page.getByText(/已导入 1 条记录/)).toBeVisible();
+  await page.goto("/projects");
+  await page.getByRole("button", { name: "新建项目" }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.project_id}/overview`));
+  await page.getByRole("button", { name: "添加研究材料" }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.project_id}/materials`));
+  await page.getByLabel("分析内容").fill("IPC E04B 2020-2025 增长，模块化施工论文方向持续增强。");
+  await page.getByRole("button", { name: "保存材料" }).click();
+  await expect(page.getByText("技术研究材料")).toBeVisible();
+  await page.getByRole("button", { name: "提取关键信息与主题" }).click();
+  await expect(page.getByRole("heading", { name: "技术主题校准" })).toBeVisible();
+  await page.getByRole("button", { name: "进入证据审阅" }).click();
+  await page.getByRole("button", { name: "检索 IPC 与论文证据" }).click();
+  await expect(page.getByText("完整性评分")).toBeVisible();
+  await page.getByRole("button", { name: "配置预测任务" }).click();
+  await page.getByRole("button", { name: "检查并启动预测" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "冻结证据并启动" }).click();
+  await expect(page).toHaveURL(/\/jobs\/job-1\/results/);
+  await expect(page.getByRole("heading", { name: "技术预测结果" })).toBeVisible({ timeout: 5000 });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "技术预测结果" })).toBeVisible();
+});

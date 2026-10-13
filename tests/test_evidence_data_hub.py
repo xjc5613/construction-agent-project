@@ -23,7 +23,21 @@ def repository():
 
 
 def _published(repo, kind, name):
-    dataset = repo.create_dataset(kind, name, "1.0")
+    public_kind = "ipc" if kind.startswith("ipc") else "paper"
+    dataset = repo.create_dataset(
+        public_kind, name, "1.0",
+        technology_node_id="tech_prefabricated_building",
+        period_code="2021_2026", public_kind=public_kind,
+    )
+    if public_kind == "ipc":
+        repo.upsert_ipc_metrics(dataset["dataset_id"], [{
+            "ipc_code": "E04B", "year": 2021, "patent_count": 1,
+        }])
+    else:
+        repo.add_paper(dataset["dataset_id"], {
+            "title": f"{name}基础记录", "year": 2021,
+            "keywords": "装配式建筑", "abstract": "基础论文记录",
+        })
     return repo.update_dataset_status(dataset["dataset_id"], "published")
 
 
@@ -31,7 +45,7 @@ def test_database_schema_rollback_and_full_text_search(repository):
     with repository.db.connect() as connection:
         assert connection.execute(
             "SELECT MAX(version) FROM schema_migrations"
-        ).fetchone()[0] == 2
+        ).fetchone()[0] == 8
         assert "item_id" in {
             row["name"] for row in connection.execute("PRAGMA table_info(evidence_items)")
         }
@@ -53,8 +67,11 @@ def test_database_schema_rollback_and_full_text_search(repository):
 
 
 def test_table_import_preview_commit_and_trend(repository, tmp_path):
-    dataset = repository.create_dataset("ipc_metrics", "IPC趋势", "1.0")
-    repository.update_dataset_status(dataset["dataset_id"], "published")
+    dataset = repository.create_dataset(
+        "ipc", "IPC趋势", "1.0",
+        technology_node_id="tech_prefabricated_building",
+        period_code="2021_2026", public_kind="ipc",
+    )
     service = ImportService(repository)
     content = (
         "IPC分类号,年份,专利数,度中心度\n"
@@ -68,6 +85,7 @@ def test_table_import_preview_commit_and_trend(repository, tmp_path):
         staged["import"]["import_id"], dataset["dataset_id"]
     )
     assert committed["committed"] == 3
+    repository.update_dataset_status(dataset["dataset_id"], "published")
     rows = repository.ipc_series(["E04B"], 2022, 2024)
     assert [row["year"] for row in rows] == [2022, 2023, 2024]
 
@@ -126,24 +144,37 @@ def test_project_isolation_evidence_retrieval_and_snapshot_stability(repository)
             "keywords": "装配式建筑,预制构件", "abstract": "装配式建筑技术方向研究。",
         }, [{"section": "摘要", "ordinal": 0, "content": "装配式建筑技术与预制构件。"}])
 
-    first = repository.create_project("项目一")
-    second = repository.create_project("项目二")
+    first = repository.create_project(
+        technology_node_id="tech_smart_construction", target_year=2040,
+    )
+    second = repository.create_project(
+        technology_node_id="tech_smart_construction", target_year=2035,
+    )
     topic = repository.save_topic({
         "project_id": first["project_id"], "topic_name": "装配式建筑技术",
         "keywords": ["装配式建筑", "E04B"],
         "evidence": [{"ipc": "E04B", "content": "E04B 技术趋势"}],
         "status": "confirmed", "requires_review": False,
+        "technologies": [{
+            "technology_node_id": "tech_prefabricated_building",
+            "is_primary": True, "relevance": 1, "source": "manual",
+        }],
     })
     assert repository.list_topics(second["project_id"]) == []
 
     service = EvidenceRetrievalService(repository)
     package = service.retrieve(first["project_id"], topic["topic_id"], 2022, 2025)
-    assert package["quality"]["sufficient"] is True
+    assert package["quality"]["sufficient"] is False
+    assert "历史阶段覆盖" in package["quality"]["missing"]
     original_ids = [item["evidence_id"] for item in package["items"]]
     second_topic = repository.save_topic({
         "project_id": first["project_id"], "topic_name": "装配式建造系统",
         "keywords": ["装配式建筑", "E04B"], "status": "confirmed",
         "requires_review": False,
+        "technologies": [{
+            "technology_node_id": "tech_prefabricated_building",
+            "is_primary": True, "relevance": 1, "source": "manual",
+        }],
     })
     second_package = service.retrieve(
         first["project_id"], second_topic["topic_id"], 2022, 2025,
@@ -190,7 +221,11 @@ def test_project_api_is_scoped_and_rejects_unsafe_file(
     )
     monkeypatch.setattr(app_module, "storage", WorkbenchStorage(tmp_path / "workbench"))
     client = TestClient(app_module.app)
-    project = client.post("/api/projects", json={"name": "API项目"}).json()
+    project = client.post("/api/projects", json={
+        "technology_node_id": "tech_smart_construction",
+        "target_year": 2040,
+        "name": "API项目",
+    }).json()
     status_response = client.patch(
         f"/api/projects/{project['project_id']}/status",
         json={"status": "material_ready"},

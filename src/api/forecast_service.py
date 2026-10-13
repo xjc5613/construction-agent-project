@@ -19,6 +19,10 @@ from .storage import WorkbenchStorage
 from .topic_service import normalize_topic
 
 _RUN_LOCK = threading.Lock()
+
+
+class JobCancelled(RuntimeError):
+    pass
 STEP_NAMES = [
     "evidence_retrieval",
     "evidence_review",
@@ -62,6 +66,23 @@ def _set_step(job: Dict[str, Any], name: str, status: str, message: str = "") ->
     job["current_stage"] = name
 
 
+def _persist_job(storage: WorkbenchStorage, job: Dict[str, Any]) -> None:
+    storage.save_job(job["job_id"], job)
+    if not job.get("project_id"):
+        return
+    try:
+        from src.library import LibraryRepository
+        LibraryRepository().update_forecast_job_status(
+            job["job_id"], job["status"], progress=float(job.get("progress", 0)),
+            current_stage=str(job.get("current_stage") or job["status"]),
+            error_message=str(job.get("error") or ""),
+            artifact_health="ready" if job.get("evidence_snapshot_checksum") else "partial",
+        )
+    except Exception:
+        # The file remains recoverable; startup reconciliation repairs control metadata.
+        pass
+
+
 def create_job(
     storage: WorkbenchStorage,
     topic_ids: List[str],
@@ -72,8 +93,15 @@ def create_job(
     evidence_snapshot: Optional[Dict[str, Any]] = None,
     evidence_limited: bool = False,
     override_reason: str = "",
+    baseline_year: int = 2025,
+    target_year: int = 2040,
+    forecast_nodes: Optional[List[int]] = None,
+    taxonomy_snapshot: Optional[Dict[str, Any]] = None,
+    stage_analysis: Optional[List[Dict[str, Any]]] = None,
+    research_contract: Optional[Dict[str, Any]] = None,
+    job_id: str = "",
 ) -> Dict[str, Any]:
-    job_id = f"forecast_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
+    job_id = job_id or f"forecast_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:6]}"
     job = {
         "job_id": job_id,
         "status": "queued",
@@ -89,6 +117,15 @@ def create_job(
         "evidence_limited": evidence_limited,
         "override_reason": override_reason,
         "evidence_snapshot_checksum": "",
+        "baseline_year": baseline_year,
+        "target_year": target_year,
+        "forecast_nodes": forecast_nodes or [2030, 2035, 2040],
+        "taxonomy_snapshot": taxonomy_snapshot or {},
+        "stage_analysis": stage_analysis or [],
+        "research_contract": research_contract or {},
+        "research_contract_version": int(
+            (research_contract or {}).get("version", 2)
+        ),
     }
     storage.save_job(job_id, job)
     if evidence_snapshot is not None:
@@ -133,14 +170,32 @@ def _build_result(
         if result.get("reasoning_chain")
     ]
     paradigm = round2_result.get("new_paradigm_name", "未形成稳定的新范式")
+    forecast_nodes = [
+        str(year) for year in job.get("forecast_nodes", [2030, 2035, 2040])
+    ]
+    baseline_year = int(job.get("baseline_year", 2025))
+    target_year = int(job.get("target_year", 2040))
     conclusion = (
         f"基于{len(round1_results)}个技术主题的证据约束预测，"
-        f"2030—2040年的重点是跨IPC技术融合、TRL提升和不确定性治理。"
+        f"从{baseline_year}基线到{target_year}年的重点是跨IPC技术融合、"
+        f"TRL提升和不确定性治理。"
         f"综合范式归纳为“{paradigm}”。"
     )
     return {
         "job_id": job_id,
-        "time_nodes": ["2030", "2035", "2040"],
+        "time_nodes": forecast_nodes,
+        "baseline_year": baseline_year,
+        "target_year": target_year,
+        "taxonomy": job.get("taxonomy_snapshot", {}),
+        "historical_periods": list(
+            (job.get("research_contract") or {}).get("periods", {})
+        ) or ["2010_2015", "2016_2020", "2021_2026"],
+        "research_contract": job.get("research_contract", {}),
+        "research_contract_version": int(
+            job.get("research_contract_version")
+            or (job.get("research_contract") or {}).get("version", 2)
+        ),
+        "stage_analysis": job.get("stage_analysis", []),
         "topics": topics,
         "round1_results": round1_results,
         "round2_result": round2_result,
@@ -170,20 +225,23 @@ def _build_charts(result: Dict[str, Any]) -> Dict[str, Any]:
     round1_by_topic = {
         item.get("topic_name"): item for item in result.get("round1_results", [])
     }
+    baseline = str(result.get("baseline_year", 2025))
+    forecast_nodes = [str(year) for year in result.get("time_nodes", [])]
+    chart_years = [baseline, *forecast_nodes]
     for roadmap in result["per_topic_roadmaps"]:
         topic_name = roadmap.get("topic_name", "")
         series = {"name": topic_name, "data": []}
-        for year in ("2025", "2030", "2035", "2040"):
+        for year in chart_years:
             milestones = roadmap.get("roadmap", {}).get(year, {}).get("milestones", [])
             trls = [item.get("trl_level") for item in milestones if isinstance(item.get("trl_level"), (int, float))]
-            if year != "2025":
+            if year != baseline:
                 timeline.append({
                     "topic": topic_name,
                     "year": year,
                     "milestones": [item.get("name", "") for item in milestones],
                 })
             series["data"].append({"year": year, "value": round(sum(trls) / len(trls), 2) if trls else None})
-            if year != "2025":
+            if year != baseline:
                 levels = [item.get("uncertainty_level", "medium") for item in milestones]
                 score = {"low": 1, "medium": 2, "high": 3}
                 heatmap.append({
@@ -279,6 +337,10 @@ def _build_charts(result: Dict[str, Any]) -> Dict[str, Any]:
         )[:30],
         "evidence_matrix": evidence_matrix,
         "fusion_sankey": sankey_links,
+        "baseline_year": result.get("baseline_year", 2025),
+        "target_year": result.get("target_year", 2040),
+        "forecast_nodes": result.get("time_nodes", []),
+        "stage_analysis": result.get("stage_analysis", []),
     }
 
 
@@ -303,7 +365,13 @@ def _build_markdown(result: Dict[str, Any]) -> str:
         f"- 证据截止与限制：{'证据受限，' + result.get('override_reason', '') if result.get('evidence_limited') else '通过完整性门槛'}",
         "",
         "## 方法说明",
-        "系统复用现有三轮预测、分主题路线图、置信度和推理链条机制；2025年仅作基线，重点预测2030、2035、2040三个节点。",
+        (
+            f"系统以{result.get('baseline_year', 2025)}年为基线，"
+            f"目标年份为{result.get('target_year', 2040)}，累计预测节点为"
+            f"{'、'.join(result.get('time_nodes', []))}。"
+        ),
+        "- 历史阶段：2010-2015、2016-2020、2021-2026",
+        f"- 技术目录版本：{result.get('taxonomy', {}).get('taxonomy_version', 'legacy')}",
         "",
         "## 技术主题预测",
     ]
@@ -339,6 +407,46 @@ def _build_markdown(result: Dict[str, Any]) -> str:
         "交互式图表数据见 charts.json；主题级 PNG 资产见 assets.json。",
     ])
     return "\n".join(lines) + "\n"
+
+
+def _normalize_dynamic_outputs(
+    round3_result: Any, roadmaps: List[Dict[str, Any]],
+    baseline_year: int, forecast_nodes: List[int],
+) -> tuple[Any, List[Dict[str, Any]], List[str]]:
+    required = {str(year) for year in forecast_nodes}
+    baseline = str(baseline_year)
+    missing: List[str] = []
+    if isinstance(round3_result, dict):
+        items = round3_result.get("roadmap_items", [])
+    else:
+        items = round3_result if isinstance(round3_result, list) else []
+    filtered_items = [
+        item for item in items if str(item.get("year")) in required
+    ]
+    present_global = {str(item.get("year")) for item in filtered_items}
+    for year in sorted(required - present_global):
+        missing.append(f"全局路线图缺少 {year}")
+    if isinstance(round3_result, dict):
+        round3_result = {
+            **round3_result, "roadmap_items": filtered_items,
+        }
+    else:
+        round3_result = filtered_items
+
+    normalized_roadmaps = []
+    for roadmap in roadmaps:
+        stages = dict(roadmap.get("roadmap", {}))
+        if baseline == "2026" and "2026" not in stages and "2025" in stages:
+            stages["2026"] = stages.pop("2025")
+        allowed = {baseline, *required}
+        stages = {
+            str(year): value for year, value in stages.items()
+            if str(year) in allowed
+        }
+        for year in sorted(required - set(stages)):
+            missing.append(f"{roadmap.get('topic_name', '未命名主题')}缺少 {year}")
+        normalized_roadmaps.append({**roadmap, "roadmap": stages})
+    return round3_result, normalized_roadmaps, missing
 
 
 @contextmanager
@@ -397,10 +505,33 @@ def run_forecast_job(storage: WorkbenchStorage, job_id: str) -> None:
         job = storage.get_job(job_id)
         if not job:
             return
+        def check_cancel() -> None:
+            if not job.get("project_id"):
+                return
+            from src.library import LibraryRepository
+            repository = LibraryRepository()
+            persisted = repository.get_forecast_job(job_id)
+            if not persisted or persisted["status"] != "cancelling":
+                return
+            job["status"] = "cancelled"
+            job["current_stage"] = "cancelled"
+            job["error"] = "任务已由用户取消"
+            for step in job["steps"]:
+                if step["status"] == "pending":
+                    step["status"] = "skipped"
+                    step["message"] = "任务已取消"
+            _persist_job(storage, job)
+            repository.update_forecast_job_status(
+                job_id, "cancelled", progress=float(job.get("progress", 0)),
+                current_stage="cancelled", error_code="cancelled_by_user",
+                error_message="任务已由用户取消", artifact_health="partial",
+            )
+            raise JobCancelled()
         try:
+            check_cancel()
             job["status"] = "running"
             _set_step(job, "topic_normalization", "running")
-            storage.save_job(job_id, job)
+            _persist_job(storage, job)
             if job.get("project_id"):
                 from src.library import LibraryRepository
                 LibraryRepository().update_forecast_job_status(job_id, "running")
@@ -423,32 +554,55 @@ def run_forecast_job(storage: WorkbenchStorage, job_id: str) -> None:
 
             options = job["options"]
             with _job_runner_configuration(storage.job_dir(job_id), options):
+                check_cancel()
                 _set_step(job, "round1", "running")
-                storage.save_job(job_id, job)
+                _persist_job(storage, job)
                 round1_results = run_round1(inputs, force_rerun=options.get("force_rerun", False))
                 if not round1_results:
                     raise ValueError("Round 1 未产生任何有效主题结果，任务已停止")
+                forecast_context = {
+                    "baseline_year": job.get("baseline_year", 2025),
+                    "target_year": job.get("target_year", 2040),
+                    "forecast_nodes": job.get(
+                        "forecast_nodes", [2030, 2035, 2040]
+                    ),
+                    "taxonomy": job.get("taxonomy_snapshot", {}),
+                    "stage_analysis": job.get("stage_analysis", []),
+                }
+                for result in round1_results:
+                    result["_forecast_context"] = forecast_context
                 _set_step(job, "round1", "done", f"完成 {len(round1_results)}/{len(inputs)} 个主题")
 
+                check_cancel()
                 _set_step(job, "round2", "running")
-                storage.save_job(job_id, job)
+                _persist_job(storage, job)
                 round2_result = run_round2(round1_results, force_rerun=options.get("force_rerun", False))
                 _set_step(job, "round2", "done")
 
+                check_cancel()
                 _set_step(job, "round3", "running")
-                storage.save_job(job_id, job)
+                _persist_job(storage, job)
                 round3_result = run_round3(round1_results, round2_result, force_rerun=options.get("force_rerun", False))
                 _set_step(job, "round3", "done")
 
                 roadmaps: List[Dict[str, Any]] = []
                 if options.get("enable_per_topic_roadmap", True):
+                    check_cancel()
                     _set_step(job, "per_topic_roadmap", "running")
-                    storage.save_job(job_id, job)
+                    _persist_job(storage, job)
                     roadmaps = run_all_topics_roadmap(round1_results, force_rerun=options.get("force_rerun", False))
                     _set_step(job, "per_topic_roadmap", "done")
                 else:
                     _set_step(job, "per_topic_roadmap", "skipped")
 
+            round3_result, roadmaps, missing_nodes = _normalize_dynamic_outputs(
+                round3_result, roadmaps,
+                int(job.get("baseline_year", 2025)),
+                [int(year) for year in job.get(
+                    "forecast_nodes", [2030, 2035, 2040]
+                )],
+            )
+            check_cancel()
             _set_step(job, "report", "running")
             result = _build_result(
                 job_id, topics, round1_results, round2_result, round3_result, roadmaps, job
@@ -465,6 +619,7 @@ def run_forecast_job(storage: WorkbenchStorage, job_id: str) -> None:
                     "complete" if len(roadmaps) == len(round1_results) else "partial"
                 ),
                 "fallback_topics": fallback_topics,
+                "missing_nodes": missing_nodes,
             }
             charts = _build_charts(result)
             markdown = _build_markdown(result)
@@ -472,6 +627,7 @@ def run_forecast_job(storage: WorkbenchStorage, job_id: str) -> None:
                 topic.get("topic_name", ""): topic.get("topic_id", "")
                 for topic in topics
             }
+            check_cancel()
             asset_index = generate_job_assets(
                 job_id, storage.job_dir(job_id), roadmaps, topic_ids_by_name
             )
@@ -496,10 +652,11 @@ def run_forecast_job(storage: WorkbenchStorage, job_id: str) -> None:
                 or not round3_result
                 or len(roadmaps) < len(round1_results)
                 or bool(fallback_topics)
+                or bool(missing_nodes)
             )
             job["status"] = "partial_failed" if failed else "completed"
             job["current_stage"] = "completed"
-            storage.save_job(job_id, job)
+            _persist_job(storage, job)
             if job.get("project_id"):
                 from src.library import LibraryRepository
                 repository = LibraryRepository()
@@ -507,13 +664,20 @@ def run_forecast_job(storage: WorkbenchStorage, job_id: str) -> None:
                 repository.update_project_status(
                     job["project_id"], "completed" if not failed else "partial_failed"
                 )
+        except JobCancelled:
+            return
         except Exception as exc:
             job["status"] = "failed"
             job["error"] = str(exc)
             _set_step(job, job.get("current_stage", "topic_normalization"), "failed", str(exc))
-            storage.save_job(job_id, job)
+            _persist_job(storage, job)
             if job.get("project_id"):
                 from src.library import LibraryRepository
                 repository = LibraryRepository()
-                repository.update_forecast_job_status(job_id, "failed")
+                repository.update_forecast_job_status(
+                    job_id, "failed", progress=float(job.get("progress", 0)),
+                    current_stage=job.get("current_stage", "failed"),
+                    error_code="runner_failed", error_message=str(exc),
+                    artifact_health="partial",
+                )
                 repository.update_project_status(job["project_id"], "failed")

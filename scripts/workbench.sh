@@ -42,6 +42,7 @@ case "${1:-}" in
     npm --prefix "${FRONTEND_DIR}" ci
     python3 "${ROOT_DIR}/scripts/migrate_resources.py" --apply
     python3 "${ROOT_DIR}/scripts/seed_library.py" --include-legacy-project
+    python3 "${ROOT_DIR}/scripts/migrate_taxonomy_stage_data.py" --apply
     ;;
   backend)
     ensure_port_free 8000
@@ -56,7 +57,7 @@ case "${1:-}" in
     ensure_node
     ensure_port_free 8000
     ensure_port_free 5173
-    python3 -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000 &
+    python3 -m uvicorn src.api.app:app --host 127.0.0.1 --port 8000 --reload &
     BACKEND_PID=$!
     npm --prefix "${FRONTEND_DIR}" run dev -- --host 127.0.0.1 --strictPort &
     FRONTEND_PID=$!

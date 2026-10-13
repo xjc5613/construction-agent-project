@@ -1,6 +1,10 @@
 import { useEffect, useRef } from "react";
 import type { ChartData } from "../types";
 
+function ChartAlternative({ summary, headers, rows }: { summary: string; headers: string[]; rows: Array<Array<string | number | null>> }) {
+  return <details className="chart-alternative"><summary>{summary}</summary><table><caption>{summary}</caption><thead><tr>{headers.map((item) => <th scope="col" key={item}>{item}</th>)}</tr></thead><tbody>{rows.length ? rows.map((row, index) => <tr key={index}>{row.map((value, cell) => <td key={cell}>{value ?? "—"}</td>)}</tr>) : <tr><td colSpan={headers.length}>暂无数据</td></tr>}</tbody></table></details>;
+}
+
 export function ForecastCharts({ charts }: { charts: ChartData }) {
   const trlRef = useRef<HTMLDivElement>(null);
   const ipcRef = useRef<HTMLDivElement>(null);
@@ -14,12 +18,16 @@ export function ForecastCharts({ charts }: { charts: ChartData }) {
     void import("echarts").then((echarts) => {
       if (disposed || !trlRef.current || !ipcRef.current || !papersRef.current || !matrixRef.current || !fusionRef.current) return;
       const trl = echarts.init(trlRef.current);
+      const baselineYear = charts.baseline_year ?? 2025;
+      const forecastNodes = charts.forecast_nodes?.length
+        ? charts.forecast_nodes : ["2030", "2035", "2040"];
+      const roadmapYears = [String(baselineYear), ...forecastNodes];
       trl.setOption({
         color: ["#635bff", "#19a874", "#e6a23c", "#ef6461"],
         tooltip: { trigger: "axis" },
         legend: { bottom: 0, textStyle: { color: "#6b7280" } },
         grid: { left: 44, right: 18, top: 26, bottom: 48 },
-        xAxis: { type: "category", data: ["2025", "2030", "2035", "2040"] },
+        xAxis: { type: "category", data: roadmapYears },
         yAxis: { type: "value", min: 0, max: 9, name: "TRL" },
         series: charts.trl_series.map((series) => ({
           type: "line", name: series.name, smooth: true, symbolSize: 7,
@@ -83,11 +91,11 @@ export function ForecastCharts({ charts }: { charts: ChartData }) {
 
   return (
     <div className="analysis-grid">
-      <section className="surface chart-surface wide"><header><h2>技术成熟度路线</h2><span>2025 基线 → 2040</span></header><div ref={trlRef} className="chart-box" /></section>
-      <section className="surface chart-surface"><header><h2>IPC 指标趋势</h2><span>确定性计算</span></header><div ref={ipcRef} className="chart-box" /></section>
-      <section className="surface chart-surface"><header><h2>论文年度方向</h2><span>证据数量</span></header><div ref={papersRef} className="chart-box" /></section>
-      <section className="surface chart-surface wide"><header><h2>双通道证据矩阵</h2><span>IPC × 论文</span></header><div ref={matrixRef} className="chart-box small" /></section>
-      <section className="surface chart-surface wide"><header><h2>IPC 技术融合演化</h2><span>融合概率 Sankey</span></header><div ref={fusionRef} className="chart-box small" /></section>
+      <section className="surface chart-surface wide"><header><h2>技术成熟度路线</h2><span>{charts.baseline_year ?? 2025} 基线 → {charts.target_year ?? 2040}</span></header><div ref={trlRef} className="chart-box" role="img" aria-label={`技术成熟度从 ${charts.baseline_year} 基线到 ${charts.target_year} 目标年`} /><ChartAlternative summary="技术成熟度数据表" headers={["主题", "年份", "TRL"]} rows={charts.trl_series.flatMap((series) => series.data.map((item) => [series.name, item.year, item.value]))} /></section>
+      <section className="surface chart-surface"><header><h2>IPC 指标趋势</h2><span>确定性计算</span></header><div ref={ipcRef} className="chart-box" role="img" aria-label="IPC 年度指标趋势" /><ChartAlternative summary="IPC 趋势数据表" headers={["主题", "IPC", "年份", "专利量", "中心度"]} rows={charts.ipc_trends.map((item) => [item.topic, item.ipc_code, item.year, item.patent_count, item.degree_centrality])} /></section>
+      <section className="surface chart-surface"><header><h2>论文年度方向</h2><span>证据数量</span></header><div ref={papersRef} className="chart-box" role="img" aria-label="论文年度数量趋势" /><ChartAlternative summary="论文趋势数据表" headers={["主题", "年份", "数量"]} rows={charts.paper_trends.map((item) => [item.topic, item.year, item.count])} /></section>
+      <section className="surface chart-surface wide"><header><h2>双通道证据矩阵</h2><span>IPC × 论文</span></header><div ref={matrixRef} className="chart-box small" role="img" aria-label="各主题 IPC 与论文证据数量矩阵" /><ChartAlternative summary="证据矩阵数据表" headers={["主题", "IPC 数量", "论文数量", "状态"]} rows={charts.evidence_matrix.map((item) => [item.topic, item.ipc_count, item.paper_count, item.status])} /></section>
+      <section className="surface chart-surface wide"><header><h2>IPC 技术融合演化</h2><span>融合概率 Sankey</span></header><div ref={fusionRef} className="chart-box small" role="img" aria-label="IPC 技术融合关系" /><ChartAlternative summary="技术融合数据表" headers={["主题", "来源", "目标", "权重"]} rows={charts.fusion_sankey.map((item) => [item.topic, item.source, item.target, item.value])} /></section>
     </div>
   );
 }

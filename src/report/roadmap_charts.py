@@ -81,10 +81,19 @@ plt.rcParams['axes.prop_cycle'] = cycler(color=ACCENT_PALETTE)
 
 STAGE_COLORS = {
     '2025': PALETTE[0],
+    '2026': PALETTE[0],
     '2030': PALETTE[1],
     '2035': PALETTE[2],
     '2040': PALETTE[3]
 }
+
+
+def _roadmap_stages(roadmap: Dict[str, Any]) -> List[str]:
+    stages = sorted(
+        (str(stage) for stage in roadmap if str(stage).isdigit()),
+        key=int,
+    )
+    return stages or list(PER_TOPIC_ROADMAP_STAGES)
 
 UNCERTAINTY_COLORS = {
     'low': '#5E9F61',
@@ -164,9 +173,7 @@ def generate_combined_topic_chart(roadmap_data: Dict[str, Any], output_path: str
     topic_name = roadmap_data.get('topic_name', 'Technology Roadmap')
     roadmap = roadmap_data.get('roadmap', {})
     
-    stages = [s for s in PER_TOPIC_ROADMAP_STAGES if s in roadmap]
-    if not stages:
-        stages = PER_TOPIC_ROADMAP_STAGES
+    stages = _roadmap_stages(roadmap)
     
     fig = plt.figure(figsize=(11, 8), dpi=600)
     fig.patch.set_facecolor(BG_COLOR)
@@ -328,9 +335,7 @@ def generate_timeline_gantt(roadmap_data: Dict[str, Any], output_path: str) -> s
     topic_name = roadmap_data.get('topic_name', 'Technology Roadmap')
     roadmap = roadmap_data.get('roadmap', {})
     
-    stages = [s for s in PER_TOPIC_ROADMAP_STAGES if s in roadmap]
-    if not stages:
-        stages = PER_TOPIC_ROADMAP_STAGES
+    stages = _roadmap_stages(roadmap)
     
     all_milestones = []
     for stage_idx, stage in enumerate(stages):
@@ -431,9 +436,7 @@ def generate_technology_network(roadmap_data: Dict[str, Any], output_path: str) 
     topic_name = roadmap_data.get('topic_name', 'Technology Roadmap')
     roadmap = roadmap_data.get('roadmap', {})
     
-    stages = [s for s in PER_TOPIC_ROADMAP_STAGES if s in roadmap]
-    if not stages:
-        stages = PER_TOPIC_ROADMAP_STAGES
+    stages = _roadmap_stages(roadmap)
     
     tech_counts = {}
     tech_by_stage = {}
@@ -524,9 +527,7 @@ def generate_comprehensive_radar(roadmap_data: Dict[str, Any], output_path: str)
     topic_name = roadmap_data.get('topic_name', 'Technology Roadmap')
     roadmap = roadmap_data.get('roadmap', {})
     
-    stages = [s for s in PER_TOPIC_ROADMAP_STAGES if s in roadmap]
-    if not stages:
-        stages = PER_TOPIC_ROADMAP_STAGES
+    stages = _roadmap_stages(roadmap)
     
     categories = ['TRL Level', 'Milestone\nDensity', 'Tech\nDiversity',
                   'Certainty', 'Scope', 'Innovation']
@@ -634,7 +635,11 @@ def generate_all_topics_comparison(all_roadmaps: List[Dict[str, Any]], output_pa
         return ''
     
     topics = [rm.get('topic_name', f'Topic {i}') for i, rm in enumerate(all_roadmaps)]
-    stages = PER_TOPIC_ROADMAP_STAGES
+    stages = sorted({
+        stage
+        for roadmap in all_roadmaps
+        for stage in _roadmap_stages(roadmap.get('roadmap', {}))
+    }, key=int)
     
     fig = plt.figure(figsize=(14, 10), dpi=600)
     fig.patch.set_facecolor(BG_COLOR)

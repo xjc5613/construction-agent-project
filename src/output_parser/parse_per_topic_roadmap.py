@@ -118,7 +118,7 @@ def parse_per_topic_roadmap_output(raw_text: str, topic_name: str = "") -> Dict[
             break
 
     if roadmap_data is None and isinstance(data, dict):
-        stage_keys = ["2025", "2030", "2035", "2040"]
+        stage_keys = ["2025", "2026", "2030", "2035", "2040"]
         if any(k in data for k in stage_keys):
             roadmap_data = data
 
@@ -127,7 +127,7 @@ def parse_per_topic_roadmap_output(raw_text: str, topic_name: str = "") -> Dict[
             roadmap_data = data
 
     if isinstance(roadmap_data, list):
-        stage_order = ["2025", "2030", "2035", "2040"]
+        stage_order = ["2026", "2030", "2035", "2040"]
         mapped = {}
         for i, stage_item in enumerate(roadmap_data[:4]):
             if i < len(stage_order):
@@ -146,7 +146,7 @@ def parse_per_topic_roadmap_output(raw_text: str, topic_name: str = "") -> Dict[
         return result
 
     roadmap = {}
-    stage_order = ["2025", "2030", "2035", "2040"]
+    stage_order = ["2025", "2026", "2030", "2035", "2040"]
 
     for year in stage_order:
         if year in roadmap_data:

@@ -1,29 +1,32 @@
-import type { Dataset, Project } from "../types";
+import type { Dataset, Project, Readiness } from "../types";
 import { Metric, PageHeading, StatusPill } from "../components/UI";
 import type { PageKey } from "../components/AppShell";
 
 export function DashboardPage({
-  datasets, projects, onNavigate, onSelectProject,
+  datasets, projects, readiness, activeProject, onNavigate, onSelectProject,
 }: {
   datasets: Dataset[];
   projects: Project[];
+  readiness: Readiness | null;
+  activeProject: Project | null;
   onNavigate: (page: PageKey) => void;
   onSelectProject: (project: Project) => void;
 }) {
   const published = datasets.filter((item) => item.status === "published").length;
   const running = projects.filter((item) => ["forecasting", "running"].includes(item.status)).length;
+  const progress = readiness?.progress_percent ?? 0;
   return (
     <>
       <section className="hero-banner">
         <div>
           <span className="hero-tag">Evidence Forecast Center</span>
-          <h1>面向 2040 的技术预测工作台</h1>
+          <h1>从历史阶段到目标年份的技术预测</h1>
           <p>把 IPC 时间趋势、论文研究方向和人工判断组织成可追溯的预测证据链。</p>
           <div className="hero-chips"><span>2030 技术验证</span><span>2035 规模应用</span><span>2040 范式演化</span></div>
         </div>
         <div className="hero-action">
-          <small>研究流程完整度</small><strong>{projects.length ? "72%" : "20%"}</strong>
-          <div className="progress-line"><i style={{ width: projects.length ? "72%" : "20%" }} /></div>
+          <small>{activeProject ? `${activeProject.name} 流程完整度` : "选择项目后查看真实流程完整度"}</small><strong>{progress}%</strong>
+          <div className="progress-line"><i style={{ width: `${progress}%` }} /></div>
           <button onClick={() => onNavigate("projects")}>进入项目管理</button>
         </div>
       </section>
@@ -31,7 +34,7 @@ export function DashboardPage({
         <Metric label="基础数据集" value={datasets.length} note={`${published} 个已发布版本`} />
         <Metric label="预测项目" value={projects.length} note={`${running} 个任务正在运行`} tone="green" />
         <Metric label="证据通道" value="2" note="IPC 趋势与论文研究" tone="amber" />
-        <Metric label="预测节点" value="3" note="2030 / 2035 / 2040" tone="red" />
+        <Metric label="预测基线" value={activeProject?.baseline_year ?? "2026"} note={activeProject ? `累计到 ${activeProject.target_year}` : "新项目默认基线"} tone="red" />
       </div>
       <div className="dashboard-grid">
         <section className="surface">
@@ -52,9 +55,9 @@ export function DashboardPage({
         <section className="surface quick-entry">
           <header className="surface-header"><div><h2>快捷入口</h2><p>常用研究操作</p></div></header>
           {[
-            ["基础数据", "导入 IPC 表格与论文文件", "library"],
+            ["技术管理", "维护三级技术目录与关联", "technologies"],
+            ["基础数据", "按技术查看和导入论文、IPC 指标", "library"],
             ["新建项目", "定义本次技术预测范围", "projects"],
-            ["证据审阅", "确认模型实际使用的依据", "evidence"],
           ].map(([title, note, page]) => (
             <button key={title} onClick={() => onNavigate(page as PageKey)}>
               <span>{title.slice(0, 1)}</span><div><strong>{title}</strong><small>{note}</small></div><b>›</b>

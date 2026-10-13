@@ -190,9 +190,9 @@ chmod +x scripts/bootstrap_node.sh scripts/workbench.sh
 - 论文 PDF 显示“待复核”：通常表示文件是扫描件或文本覆盖率过低，需要提供 OCR 文本。
 - 启动预测提示证据不足：补充至少一个覆盖三年的 IPC 序列和相关论文，或填写人工覆盖理由。
 
-工作流为：基础数据导入 → 新建项目 → 文本/文件材料输入 → 候选主题抽取与校准 → IPC/论文证据审阅 → 证据快照 → 2030/2035/2040 预测 → 多维图表与学术报告。
+工作流为：维护技术目录 → 按三级技术导入并查看基础记录 → 选择一级技术与目标年份新建项目 → 在项目概览检查数据覆盖 → 输入研究材料 → 在同一页面完成主题校准与证据审阅 → 冻结技术和数据范围 → 累计节点预测 → 结果与任务历史。
 
-页面采用固定侧栏研究工作台布局，包含基础数据、项目管理、输入材料、主题校准、证据审阅、启动预测和结果分析。结果中心展示IPC趋势、论文年度方向、双证据矩阵、2025基线及2030/2035/2040路线图；PNG图表仅在点击后通过受控资产API加载，浏览器不会获得本地文件路径。
+未进入项目时侧栏只显示工作台、技术目录、基础数据和预测项目；进入项目后才显示项目概览、研究材料、主题与证据、预测运行、结果与历史。新项目以2026为基线：目标2030输出2030，目标2035输出2030/2035，目标2040输出2030/2035/2040；历史任务仍按原快照显示。详细流程、范围规则和迁移步骤见 [`docs/streamlined-forecast-workflow.md`](docs/streamlined-forecast-workflow.md)。
 
 #### 基础数据格式
 
@@ -214,9 +214,11 @@ ipc1,ipc2,year,probability
 title,authors,year,doi,keywords,abstract
 ```
 
-支持 `.csv`、`.xlsx`、`.json` 表格和 `.pdf`、`.docx`、`.txt`、`.md` 文档。导入先预览字段映射和错误行，确认后才写入数据集。
+支持 `.csv`、`.xlsx`、`.json` 表格和 `.pdf`、`.docx`、`.txt`、`.md` 文档。用户选择三级技术和数据类型后直接上传；系统预览字段、错误行和阶段拆分计划，并自动生成底层数据集版本。当前 IPC 列表展示年度聚合专利指标，不包含逐件专利题名、申请人或申请号。
 可直接使用的 CSV 模板、字段约束、备份恢复和导入故障排查见
 [`docs/data-import.md`](docs/data-import.md)。
+技术目录、三阶段数据、累计预测节点和迁移规则见
+[`docs/technology-taxonomy-stage-forecasting.md`](docs/technology-taxonomy-stage-forecasting.md)。
 
 #### 数据目录与备份
 
@@ -232,6 +234,10 @@ title,authors,year,doi,keywords,abstract
 python3 scripts/migrate_resources.py
 python3 scripts/migrate_resources.py --apply
 python3 scripts/seed_library.py --include-legacy-project
+python3 scripts/migrate_taxonomy_stage_data.py
+python3 scripts/migrate_taxonomy_stage_data.py --apply
+python3 scripts/inventory_workflow_data.py \
+  --output var/migration/streamlined-workflow-inventory.json
 ```
 
 迁移脚本只复制和校验文件，不删除旧数据。详细目录责任见 `docs/resource-layout.md`。
@@ -315,6 +321,16 @@ outputs/
 | 🔴 低置信 | <60% | 预测结果分歧较大，需谨慎参考 |
 
 ## 测试
+
+工作台的生命周期、证据门禁、任务恢复与浏览器验收说明见
+[`docs/workbench-hardening.md`](docs/workbench-hardening.md)。前端端到端测试使用模拟
+API，不会调用付费模型：
+
+```bash
+cd frontend
+npm run test:e2e:install
+npm run test:e2e
+```
 
 ### 运行所有测试
 

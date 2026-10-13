@@ -40,6 +40,18 @@ def build_round1_messages(topic_input: Dict[str, Any]) -> list:
               "evidence_conflicts 字段。每项核心结论必须包含 evidence_ids、"
               "confidence、assumptions、uncertainty_reason；不得生成证据包中不存在的统计值。"
         )
+    forecast_context = topic_input.get("forecast_context", {})
+    if forecast_context:
+        user += (
+            "\n\n=== 项目预测合同 ===\n"
+            + json.dumps({
+                **forecast_context,
+                "technologies": topic_input.get("technologies", []),
+                "stage_analysis": topic_input.get("stage_analysis", []),
+            }, ensure_ascii=False)
+            + "\n只输出合同中 forecast_nodes 要求的未来节点，以 baseline_year 为基线；"
+              "阶段统计值只可引用，不得重算或虚构。"
+        )
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": user}

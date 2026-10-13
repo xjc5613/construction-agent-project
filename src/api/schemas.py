@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
+from src.library.validation import validate_override_reason
 
 
 class DocumentCreate(BaseModel):
@@ -107,6 +108,9 @@ class EvidenceGroundedTopicInput(BaseModel):
     operator_notes: str = ""
     evidence_score: float = Field(default=0, ge=0, le=100)
     evidence_package: Dict[str, Any] = Field(default_factory=dict)
+    technologies: List[Dict[str, Any]] = Field(default_factory=list)
+    stage_analysis: List[Dict[str, Any]] = Field(default_factory=list)
+    forecast_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ForecastOptions(BaseModel):
@@ -128,19 +132,79 @@ class ForecastJobCreate(BaseModel):
     @field_validator("time_nodes")
     @classmethod
     def validate_time_nodes(cls, value: List[str]) -> List[str]:
-        if sorted(set(value)) != ["2030", "2035", "2040"]:
-            raise ValueError("预测节点必须且只能包含2030、2035、2040")
-        return ["2030", "2035", "2040"]
+        ordered = [year for year in ("2030", "2035", "2040") if year in value]
+        if not ordered or len(ordered) != len(set(value)):
+            raise ValueError("预测节点必须是非重复的2030、2035、2040")
+        return ordered
 
 
 class ProjectForecastJobCreate(ForecastJobCreate):
     override_evidence_gate: bool = False
     override_reason: str = Field(default="", max_length=500)
+    idempotency_key: str = Field(default="", max_length=120)
+    confirmation_token: str = ""
+    parent_job_id: Optional[str] = None
 
     @field_validator("override_reason")
     @classmethod
     def validate_override_reason(cls, value: str) -> str:
-        return value.strip()
+        return validate_override_reason(value)
+
+
+class ReadinessRequirement(BaseModel):
+    id: str
+    label: str
+    actual: Any
+    required: Any
+    passed: bool
+    blocking: bool = True
+    overrideable: bool = True
+    weight: int = Field(ge=0, le=100)
+    remediation: str = ""
+
+
+class EvidenceReadiness(BaseModel):
+    contract_version: int
+    score: int = Field(ge=0, le=100)
+    sufficient: bool
+    state: Literal["ready", "blocked", "override_required"]
+    requirements: List[ReadinessRequirement] = Field(default_factory=list)
+    missing: List[str] = Field(default_factory=list)
+    missing_periods: List[str] = Field(default_factory=list)
+    ipc_record_count: int = 0
+    year_count: int = 0
+    paper_count: int = 0
+    paper_fragment_count: int = 0
+    data_cutoff: Optional[int] = None
+
+
+class WorkflowStepReadiness(BaseModel):
+    id: Literal["overview", "materials", "topics-evidence", "forecast", "results"]
+    label: str
+    state: Literal["hidden", "blocked", "available", "completed"]
+    visible: bool = True
+    route: str
+    blocking_reasons: List[str] = Field(default_factory=list)
+    remediation: List[str] = Field(default_factory=list)
+
+
+class RecommendedWorkflowAction(BaseModel):
+    step_id: str
+    label: str
+    route: str
+
+
+class PaginatedRecords(BaseModel):
+    items: List[Dict[str, Any]] = Field(default_factory=list)
+    total: int = Field(ge=0)
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+
+
+class JobActionCommit(BaseModel):
+    confirmation_token: str = Field(min_length=1)
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: str = Field(default="", max_length=120)
 
 
 class ForecastStep(BaseModel):
@@ -151,7 +215,10 @@ class ForecastStep(BaseModel):
 
 class ForecastJobStatus(BaseModel):
     job_id: str
-    status: Literal["queued", "running", "completed", "partial_failed", "failed"]
+    status: Literal[
+        "queued", "running", "cancelling", "cancelled",
+        "completed", "partial_failed", "failed",
+    ]
     current_stage: str
     progress: float = Field(ge=0, le=1)
     steps: List[ForecastStep]
@@ -178,3 +245,8 @@ class ForecastResult(BaseModel):
     override_reason: str = ""
     evidence_snapshot_checksum: str = ""
     stage_quality: Dict[str, Any] = Field(default_factory=dict)
+    baseline_year: int = 2025
+    target_year: int = 2040
+    taxonomy: Dict[str, Any] = Field(default_factory=dict)
+    historical_periods: List[str] = Field(default_factory=list)
+    stage_analysis: List[Dict[str, Any]] = Field(default_factory=list)

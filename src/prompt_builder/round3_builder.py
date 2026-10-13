@@ -35,6 +35,13 @@ def build_round3_messages(round1_outputs: List[Dict[str, Any]], round2_output: D
         "\n\n不得只使用每个主题的首条结论。每个路线节点必须标注 evidence_ids、"
         "confidence、assumptions 和 uncertainty_reason，并保留证据冲突。"
     )
+    context = round1_outputs[0].get("_forecast_context", {}) if round1_outputs else {}
+    if context:
+        user += (
+            "\n\n=== 项目预测合同 ===\n"
+            + json.dumps(context, ensure_ascii=False)
+            + "\n路线图只能输出 forecast_nodes 中的年份，不得补充目标年份之后的节点。"
+        )
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": user}

@@ -213,4 +213,7 @@ def normalize_topic(topic: Dict[str, Any]) -> Dict[str, Any]:
             item for item in active_items if item.get("evidence_type") == "material"
         ],
         "evidence_quality": evidence_package.get("quality", {}),
+        "technologies": topic.get("technologies", []),
+        "stage_analysis": topic.get("stage_analysis", []),
+        "forecast_context": topic.get("forecast_context", {}),
     }

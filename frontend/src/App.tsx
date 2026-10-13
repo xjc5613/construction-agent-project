@@ -1,121 +1,222 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "./api";
-import { AppShell, type PageKey } from "./components/AppShell";
-import { DashboardPage } from "./pages/DashboardPage";
-import { EvidencePage } from "./pages/EvidencePage";
-import { ForecastPage } from "./pages/ForecastPage";
-import { LibraryPage } from "./pages/LibraryPage";
-import { MaterialsPage } from "./pages/MaterialsPage";
-import { ProjectsPage } from "./pages/ProjectsPage";
-import { ResultsPage } from "./pages/ResultsPage";
-import { TopicsPage } from "./pages/TopicsPage";
-import type {
-  Asset, ChartData, Dataset, Job, Project, Result, ResultTopic, Topic,
-} from "./types";
+import type { ForecastResult, JobStatus, TopicEvidence } from "./types";
+import { TrlChart, UncertaintyHeatmap } from "./components/Charts";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
+const STAGE_LABEL: Record<string, string> = {
+  prepare: "载入证据",
+  execute: "主题预测（执行器）",
+  think: "科学评审（思考者）",
+  revise: "根据评审修正",
+  roadmap: "绘制技术路线图",
+  synthesize: "全局综合",
+  done: "完成",
+};
+
+function confidenceColor(c: number) {
+  return c >= 75 ? "#2f7d4f" : c >= 55 ? "#b08a2c" : "#b5483f";
+}
 
 export function App() {
-  const [active, setActive] = useState<PageKey>("dashboard");
-  const [health, setHealth] = useState("未连接");
-  const [datasets, setDatasets] = useState<Dataset[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [project, setProject] = useState<Project | null>(null);
-  const [extractedTopics, setExtractedTopics] = useState<Topic[]>([]);
-  const [job, setJob] = useState<Job | null>(null);
-  const [result, setResult] = useState<Result | null>(null);
-  const [charts, setCharts] = useState<ChartData | null>(null);
-  const [resultTopics, setResultTopics] = useState<ResultTopic[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [notice, setNotice] = useState("");
-
-  const notify = (message: string) => {
-    setNotice(message);
-    window.setTimeout(() => setNotice(""), 3200);
-  };
-  const refreshDatasets = async () => {
-    const data = await apiRequest<{ items: Dataset[] }>(API_BASE, "/library/datasets");
-    setDatasets(data.items);
-  };
-  const refreshProjects = async () => {
-    const data = await apiRequest<{ items: Project[] }>(API_BASE, "/projects");
-    setProjects(data.items);
-  };
-  const selectProject = async (selected: Project, next: PageKey = "materials") => {
-    const detail = await apiRequest<Project>(API_BASE, `/projects/${selected.project_id}`);
-    setProject(detail); setExtractedTopics(detail.topics ?? []); setActive(next);
-  };
-  const refreshProject = async () => {
-    if (!project) return;
-    const detail = await apiRequest<Project>(API_BASE, `/projects/${project.project_id}`);
-    setProject(detail); setExtractedTopics(detail.topics ?? []);
-  };
+  const [health, setHealth] = useState<boolean | null>(null);
+  const [topics, setTopics] = useState<TopicEvidence[]>([]);
+  const [job, setJob] = useState<JobStatus | null>(null);
+  const [result, setResult] = useState<ForecastResult | null>(null);
+  const [error, setError] = useState("");
+  const timer = useRef<number | null>(null);
 
   useEffect(() => {
-    void Promise.all([
-      apiRequest<{ ok: boolean }>(API_BASE, "/health").then((data) => setHealth(data.ok ? "已连接" : "已禁用")),
-      refreshDatasets(),
-      refreshProjects(),
-    ]).catch((error) => {
-      setHealth("未连接"); notify((error as Error).message);
-    });
+    apiRequest<{ ok: boolean }>("/health")
+      .then((d) => setHealth(d.ok))
+      .catch(() => setHealth(false));
+    apiRequest<{ items: TopicEvidence[] }>("/topics")
+      .then((d) => setTopics(d.items))
+      .catch(() => undefined);
   }, []);
 
-  useEffect(() => {
-    if (!job || !["queued", "running"].includes(job.status)) return;
-    const timer = window.setInterval(() => {
-      void apiRequest<Job>(API_BASE, `/forecast/jobs/${job.job_id}`)
-        .then(async (next) => {
-          setJob(next);
-          if (["completed", "partial_failed"].includes(next.status)) {
-            const [resultData, chartData, topicData, assetData] = await Promise.all([
-              apiRequest<Result>(API_BASE, `/forecast/jobs/${next.job_id}/results`),
-              apiRequest<ChartData>(API_BASE, `/forecast/jobs/${next.job_id}/charts`),
-              apiRequest<{ items: ResultTopic[] }>(API_BASE, `/forecast/jobs/${next.job_id}/topics`),
-              apiRequest<{ items: Asset[] }>(API_BASE, `/forecast/jobs/${next.job_id}/assets`),
-            ]);
-            setResult(resultData); setCharts(chartData);
-            setResultTopics(topicData.items); setAssets(assetData.items);
-            setActive("results"); await refreshProjects();
-          }
-        })
-        .catch((error) => notify((error as Error).message));
-    }, 1800);
-    return () => window.clearInterval(timer);
-  }, [job?.job_id, job?.status]);
+  const poll = useCallback((jobId: string) => {
+    if (timer.current) window.clearInterval(timer.current);
+    timer.current = window.setInterval(async () => {
+      try {
+        const j = await apiRequest<JobStatus>(`/forecast/${jobId}`);
+        setJob(j);
+        if (j.status === "completed") {
+          window.clearInterval(timer.current!);
+          setResult(await apiRequest<ForecastResult>(`/forecast/${jobId}/result`));
+        } else if (j.status === "failed") {
+          window.clearInterval(timer.current!);
+          setError(j.error || "预测失败");
+        }
+      } catch {
+        /* keep polling */
+      }
+    }, 2000);
+  }, []);
 
-  const navigate = (page: PageKey) => {
-    const projectPages: PageKey[] = ["materials", "topics", "evidence", "forecast", "results"];
-    if (projectPages.includes(page) && !project) {
-      setActive("projects"); notify("请先选择一个预测项目"); return;
+  const run = async () => {
+    setError("");
+    setResult(null);
+    try {
+      const j = await apiRequest<JobStatus>("/forecast", { method: "POST" });
+      setJob(j);
+      poll(j.job_id);
+    } catch (e) {
+      setError((e as Error).message);
     }
-    if (page === "forecast") void refreshProject();
-    setActive(page);
   };
 
-  let content;
-  if (active === "dashboard") {
-    content = <DashboardPage datasets={datasets} projects={projects} onNavigate={navigate} onSelectProject={(item) => void selectProject(item)} />;
-  } else if (active === "library") {
-    content = <LibraryPage apiBase={API_BASE} datasets={datasets} onRefresh={refreshDatasets} />;
-  } else if (active === "projects") {
-    content = <ProjectsPage apiBase={API_BASE} projects={projects} onCreated={(created) => { setProjects((items) => [created, ...items]); void selectProject(created); }} onSelect={(item) => void selectProject(item)} />;
-  } else if (active === "materials" && project) {
-    content = <MaterialsPage apiBase={API_BASE} project={project} onTopics={(topics) => { setExtractedTopics(topics); void refreshProject(); setActive("topics"); }} />;
-  } else if (active === "topics" && project) {
-    content = <TopicsPage apiBase={API_BASE} project={project} initialTopics={extractedTopics} onEvidence={() => { void refreshProject(); setActive("evidence"); }} />;
-  } else if (active === "evidence" && project) {
-    content = <EvidencePage apiBase={API_BASE} project={project} onForecast={() => { void refreshProject(); setActive("forecast"); }} />;
-  } else if (active === "forecast" && project) {
-    content = <ForecastPage apiBase={API_BASE} project={project} topics={project.topics ?? extractedTopics} job={job} onJob={(next) => { setJob(next); setResult(null); setCharts(null); }} />;
-  } else {
-    content = <ResultsPage apiBase={API_BASE} job={job} result={result} charts={charts} topics={resultTopics} assets={assets} />;
-  }
+  const running = job && ["queued", "running"].includes(job.status);
 
   return (
-    <AppShell active={active} onNavigate={navigate} projectName={project?.name} health={health}>
-      {content}
-      <div className={`toast ${notice ? "show" : ""}`}>{notice}</div>
-    </AppShell>
+    <div className="page">
+      <header className="hero">
+        <div className="eyebrow">TECHNOLOGY FORECAST · 2025 – 2040</div>
+        <h1>智能建造技术发展路线图</h1>
+        <p className="subtitle">
+          基于 IPC 专利网络证据，采用 Think-and-Execute 反思式编排，
+          对 9 个核心技术主题进行 2030 / 2035 / 2040 年趋势预测。
+        </p>
+        <div className="hero-actions">
+          <button className="primary" onClick={run} disabled={!!running}>
+            {running ? "预测进行中…" : "运行预测"}
+          </button>
+          <span className="conn">
+            {health === null ? "连接中…" : health ? "● 后端已连接" : "● 后端未连接"}
+          </span>
+        </div>
+        {error && <p className="error">{error}</p>}
+      </header>
+
+      {!result && !running && (
+        <section className="topics-preview">
+          <h2>纳入预测的技术主题（{topics.length}）</h2>
+          <div className="topic-chips">
+            {topics.map((t) => (
+              <span key={t.topic_name} className="chip">
+                {t.topic_name}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {running && job && (
+        <section className="progress-panel">
+          <div className="progress-head">
+            <strong>{STAGE_LABEL[job.stage] || job.stage}</strong>
+            <span>{Math.round(job.progress * 100)}%</span>
+          </div>
+          <div className="bar">
+            <div className="bar-fill" style={{ width: `${job.progress * 100}%` }} />
+          </div>
+          <ul className="log">
+            {job.log.slice(-5).map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {result && (
+        <main className="result">
+          <section className="stat-row">
+            <div className="stat">
+              <div className="stat-num">{result.stats.topic_count}</div>
+              <div className="stat-label">预测主题</div>
+            </div>
+            <div className="stat">
+              <div className="stat-num">{result.stats.avg_confidence}</div>
+              <div className="stat-label">平均置信度</div>
+            </div>
+            <div className="stat">
+              <div className="stat-num">{result.stats.revised ? "已修正" : "通过"}</div>
+              <div className="stat-label">科学评审</div>
+            </div>
+            <div className="stat paradigm-stat">
+              <div className="stat-num small">{result.synthesis.new_paradigm_name}</div>
+              <div className="stat-label">2040 新范式</div>
+            </div>
+          </section>
+
+          <section className="card">
+            <h2>技术成熟度（TRL）演进</h2>
+            <TrlChart roadmaps={result.roadmaps} />
+          </section>
+
+          <section className="card">
+            <h2>不确定性分布</h2>
+            <UncertaintyHeatmap roadmaps={result.roadmaps} />
+          </section>
+
+          <section className="card">
+            <h2>主题预测</h2>
+            <div className="forecast-grid">
+              {result.forecasts.map((f) => (
+                <article key={f.topic_name} className="forecast-card">
+                  <div className="fc-head">
+                    <h3>{f.topic_name}</h3>
+                    <span
+                      className="conf"
+                      style={{ color: confidenceColor(f.confidence) }}
+                    >
+                      {f.confidence}%
+                    </span>
+                  </div>
+                  <p className="fc-section">
+                    <b>2030–2035 瓶颈</b>
+                  </p>
+                  <ul>
+                    {f.bottlenecks_2030_2035.map((b, i) => (
+                      <li key={i}>{b}</li>
+                    ))}
+                  </ul>
+                  <p className="fc-section">
+                    <b>2040 突破</b>
+                  </p>
+                  <ul>
+                    {f.breakthroughs_by_2040.map((b, i) => (
+                      <li key={i}>{b}</li>
+                    ))}
+                  </ul>
+                  {f.uncertainty_notes && (
+                    <p className="fc-note">⚠ {f.uncertainty_notes}</p>
+                  )}
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="card paradigm-card">
+            <h2>新范式与重大挑战</h2>
+            <p className="paradigm-desc">{result.synthesis.new_paradigm_description}</p>
+            <div className="two-col">
+              <div>
+                <h3>跨主题融合方向</h3>
+                <ul>
+                  {result.synthesis.cross_topic_fusions.map((x, i) => (
+                    <li key={i}>{x}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h3>重大挑战</h3>
+                <ul>
+                  {result.synthesis.grand_challenges.map((x, i) => (
+                    <li key={i}>{x}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            {result.synthesis.conclusion && (
+              <p className="conclusion">{result.synthesis.conclusion}</p>
+            )}
+          </section>
+        </main>
+      )}
+
+      <footer className="foot">
+        智能建造 2040 技术预测系统 · Think-and-Execute / LangGraph 编排
+      </footer>
+    </div>
   );
 }
