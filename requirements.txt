@@ -2,6 +2,8 @@ python-dotenv==1.0.0
 requests==2.31.0
 jsonschema==4.20.0
 SciencePlots==2.2.2
+seaborn>=0.13,<1
+pytest>=8,<9
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 httpx>=0.27,<1

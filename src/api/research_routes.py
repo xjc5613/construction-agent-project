@@ -118,13 +118,16 @@ def _graph(job_id: str, override_options: Optional[Dict[str, Any]] = None,
     config = JobModelConfig(**{key: options[key] for key in (
         "provider", "model_name", "temperature", "max_tokens", "native_structured_output"
     ) if key in options})
-    model = create_chat_model(config)
+    model = None
     schemas = {"evidence_analyst": EvidenceAnalysis,
                "technology_concept_synthesizer": TechnologyConcept,
                "scientific_critic": CriticFinding,
                "topic_forecaster": ThemeForecast, "scenario_roadmap": ScenarioRoadmap}
 
     def invoke_role(role: str, payload: Dict[str, Any]):
+        nonlocal model
+        if model is None:
+            model = create_chat_model(config)
         schema = schemas[role]
         prompt = load_prompt_template(role)
         persist_prompt_manifest(repository, prompt)
@@ -750,6 +753,11 @@ def graph_manifest(job_id: str):
 @router.post("/graph/jobs/{job_id}/start")
 def start_graph(job_id: str, payload: GraphStart):
     graph = _graph(job_id, payload.model_options, payload.output_root, payload.compute_concurrency)
+    with repository.db.transaction() as connection:
+        connection.execute(
+            "UPDATE forecast_jobs SET job_mode='ipc_fusion_discovery' WHERE job_id=?",
+            (job_id,),
+        )
     try:
         snapshot = ResearchDesignService(repository).freeze_snapshot(graph.context.project_id)
     except ValueError as exc:
@@ -763,6 +771,7 @@ def start_graph(job_id: str, payload: GraphStart):
         ).fetchall()]
         predictions = [dict(row) for row in connection.execute(
             """SELECT p.prediction_id,p.candidate_id,p.rank,p.calibrated_probability,p.probability_status,
+                      p.probability_authority,p.evidence_grade,
                       c.ipc1,c.ipc2,c.target_type FROM fusion_predictions p JOIN fusion_candidates c
                ON c.candidate_id=p.candidate_id JOIN feature_runs f ON f.feature_run_id=c.feature_run_id
                JOIN network_runs n ON n.network_run_id=f.network_run_id WHERE n.project_id=?

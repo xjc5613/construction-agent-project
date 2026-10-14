@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
-import type { TopicRoadmap } from "./types";
+import type { TopicRoadmap } from "../types";
 
 const YEARS = ["2030", "2035", "2040"];
 const PALETTE = [

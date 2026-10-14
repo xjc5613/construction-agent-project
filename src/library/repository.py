@@ -1673,6 +1673,7 @@ class LibraryRepository:
             ("taxonomy_snapshot_json", "taxonomy", {}),
             ("options_json", "options", {}),
             ("request_json", "request", {}),
+            ("run_manifest_json", "run_manifest", {}),
         ):
             try:
                 result[target] = json.loads(result.pop(source))

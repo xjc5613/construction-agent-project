@@ -1,0 +1,35 @@
+{
+  "packet_id": "chapter4-evolution-evidence",
+  "mapping_reported_count": 926,
+  "objects": [
+    {"object_id": "T01", "name": "多专业协同平台", "definition": "面向多专业信息组织与协同的技术主题", "keywords": ["协同", "平台"]},
+    {"object_id": "T02", "name": "参数化与生成式设计", "definition": "参数规则、方案生成与工程约束相关主题", "keywords": ["参数化", "生成"]},
+    {"object_id": "T03", "name": "机器人集群协同", "definition": "机器人移动、驱动、作业及协同相关主题", "keywords": ["机器人", "机构", "驱动", "移动", "协同"]},
+    {"object_id": "T04", "name": "施工全过程数字孪生", "definition": "施工状态映射与过程组织相关主题", "keywords": ["数字孪生", "施工"]},
+    {"object_id": "T05", "name": "智能规范审查", "definition": "工程规则与设计合规审查相关主题", "keywords": ["规范", "审查"]},
+    {"object_id": "T06", "name": "建筑工程大模型技术", "definition": "工程知识组织、理解与辅助决策相关主题", "keywords": ["大模型", "知识"]},
+    {"object_id": "T07", "name": "装配式建筑技术", "definition": "构件生产、运输、连接与安装相关主题", "keywords": ["装配式", "构件"]},
+    {"object_id": "T08", "name": "建筑规模增材制造", "definition": "建筑打印、材料、结构与成型相关主题", "keywords": ["打印", "混凝土", "成型"]},
+    {"object_id": "T09", "name": "模块化与可重构设计", "definition": "模块接口、组合、拆装与重构相关主题", "keywords": ["模块化", "重构"]}
+  ],
+  "candidates": [
+    {"object_id": "C03", "name": "智能塔吊与吊装机器人", "definition": "吊装控制与机器人协同候选方向", "object_kind": "candidate"}
+  ],
+  "sources": [
+    {"source_id": "src-table-4-1", "source_kind": "table", "locator": "表4-1"},
+    {"source_id": "src-table-4-2", "source_kind": "table", "locator": "表4-2"},
+    {"source_id": "src-table-4-3", "source_kind": "table", "locator": "表4-3"},
+    {"source_id": "src-table-4-5", "source_kind": "table", "locator": "表4-5"},
+    {"source_id": "src-figure-4-6", "source_kind": "figure", "locator": "图4-6及4.4.2节"}
+  ],
+  "records": [
+    {"evidence_id": "Q03", "evidence_kind": "theme_fact", "object_ids": ["T03"], "statement": "机器人集群协同主题及关键词", "source_ids": ["src-table-4-5"], "mapping_basis": "verified_document_mapping", "supports": ["主题定义和技术内涵"], "does_not_support": ["主题增长率", "工程效率"]},
+    {"evidence_id": "N1-B25J011", "evidence_kind": "network_observation", "object_ids": ["T03"], "stage": "2010_2014", "ipc_codes": ["B25J-011"], "statement": "机器人相关IPC节点阶段1结构指标", "values": {"degree_centrality": 0.0405, "betweenness_centrality": 0.0}, "source_ids": ["src-table-4-1"], "mapping_basis": "functional_only", "supports": ["IPC节点阶段内结构位置"], "does_not_support": ["机器人集群协同主题增长率", "施工效率"]},
+    {"evidence_id": "N2-B25J011", "evidence_kind": "network_observation", "object_ids": ["T03"], "stage": "2015_2019", "ipc_codes": ["B25J-011"], "statement": "机器人相关IPC节点阶段2结构指标", "values": {"degree_centrality": 0.0832, "betweenness_centrality": 0.0599}, "source_ids": ["src-table-4-2"], "mapping_basis": "functional_only", "supports": ["IPC节点跨期轨迹"], "does_not_support": ["工程性能"]},
+    {"evidence_id": "N3-B25J011", "evidence_kind": "network_observation", "object_ids": ["T03"], "stage": "2020_2025", "ipc_codes": ["B25J-011"], "statement": "机器人相关IPC节点阶段3结构指标", "values": {"degree_centrality": 0.1462, "betweenness_centrality": 0.0648}, "source_ids": ["src-table-4-3"], "mapping_basis": "functional_only", "supports": ["IPC节点直接关联范围扩大"], "does_not_support": ["机器人集群协同主题增长率", "群体施工效率已经提高"]},
+    {"evidence_id": "Q08", "evidence_kind": "theme_fact", "object_ids": ["T08"], "statement": "建筑规模增材制造主题及技术内涵", "source_ids": ["src-table-4-5"], "mapping_basis": "verified_document_mapping", "supports": ["主题定义"]},
+    {"evidence_id": "N2-B33Y070", "evidence_kind": "network_observation", "object_ids": ["T08"], "stage": "2015_2019", "ipc_codes": ["B33Y-070"], "statement": "增材制造相关节点阶段2指标", "values": {"degree_centrality": 0.1257, "betweenness_centrality": 0.0349}, "source_ids": ["src-table-4-2"], "mapping_basis": "functional_only", "supports": ["阶段2结构位置"]},
+    {"evidence_id": "N3-B33Y070", "evidence_kind": "network_observation", "object_ids": ["T08"], "stage": "2020_2025", "ipc_codes": ["B33Y-070"], "statement": "增材制造相关节点度中心度下降而中介中心度上升", "values": {"degree_centrality": 0.0951, "betweenness_centrality": 0.0532}, "source_ids": ["src-table-4-3"], "mapping_basis": "functional_only", "supports": ["直接联系与桥接角色差异变化"], "does_not_support": ["所有影响力指标同步增长", "规模化应用已实现"]},
+    {"evidence_id": "H01", "evidence_kind": "semantic_relation", "object_ids": ["T02", "T05", "T09"], "statement": "既定截断高度下的静态语义子组", "source_ids": ["src-figure-4-6"], "mapping_basis": "not_applicable", "relation_type": "static_hierarchical_cluster", "supports": ["静态语义接近"], "does_not_support": ["动态融合速度", "工程效益"]}
+  ]
+}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiRequest } from "./api";
 import type { ForecastResult, JobStatus, TopicEvidence } from "./types";
 import { TrlChart, UncertaintyHeatmap } from "./components/Charts";
+import { ThesisResultPanel, type ThesisResult } from "./components/ThesisResultPanel";
 
 const STAGE_LABEL: Record<string, string> = {
   prepare: "载入证据",
@@ -23,13 +24,15 @@ export function App() {
   const [job, setJob] = useState<JobStatus | null>(null);
   const [result, setResult] = useState<ForecastResult | null>(null);
   const [error, setError] = useState("");
+  const [thesisJobId, setThesisJobId] = useState("");
+  const [thesisResult, setThesisResult] = useState<ThesisResult | null>(null);
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
     apiRequest<{ ok: boolean }>("/health")
       .then((d) => setHealth(d.ok))
       .catch(() => setHealth(false));
-    apiRequest<{ items: TopicEvidence[] }>("/topics")
+    apiRequest<{ items: TopicEvidence[] }>("/seed-topics")
       .then((d) => setTopics(d.items))
       .catch(() => undefined);
   }, []);
@@ -65,6 +68,16 @@ export function App() {
     }
   };
 
+  const loadThesisResult = async () => {
+    if (!thesisJobId.trim()) return;
+    setError("");
+    try {
+      setThesisResult(await apiRequest<ThesisResult>(`/thesis/jobs/${encodeURIComponent(thesisJobId.trim())}/result`));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const running = job && ["queued", "running"].includes(job.status);
 
   return (
@@ -86,6 +99,17 @@ export function App() {
         </div>
         {error && <p className="error">{error}</p>}
       </header>
+
+      <section className="topics-preview">
+        <h2>打开论文演化研判任务</h2>
+        <div className="hero-actions">
+          <input aria-label="论文研判任务 ID" value={thesisJobId}
+            onChange={(event) => setThesisJobId(event.target.value)} placeholder="thesis_…" />
+          <button className="primary" onClick={loadThesisResult} disabled={!thesisJobId.trim()}>查看证据与命题链</button>
+        </div>
+      </section>
+
+      {thesisResult ? <ThesisResultPanel result={thesisResult} /> : null}
 
       {!result && !running && (
         <section className="topics-preview">

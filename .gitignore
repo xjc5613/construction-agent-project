@@ -8,6 +8,7 @@ data/processed/
 data/workbench/
 var/
 .tools/
+.venv/
 frontend/node_modules/
 frontend/dist/
 *.sqlite3

@@ -28,7 +28,7 @@ def test_v5_migration_is_additive_and_repeatable(database):
     with database.connect() as connection:
         assert connection.execute(
             "SELECT MAX(version) FROM schema_migrations"
-        ).fetchone()[0] == 8
+        ).fetchone()[0] == 9
         projects = {row[1] for row in connection.execute("PRAGMA table_info(projects)")}
         jobs = {row[1] for row in connection.execute("PRAGMA table_info(forecast_jobs)")}
     assert {"lifecycle_status", "archived_at"} <= projects

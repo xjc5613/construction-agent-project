@@ -27,7 +27,7 @@ def test_v6_additive_schema_and_indexes(repositories):
     with library.db.connect() as connection:
         assert connection.execute(
             "SELECT MAX(version) FROM schema_migrations"
-        ).fetchone()[0] == 8
+        ).fetchone()[0] == 9
         tables = {row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         )}
@@ -70,7 +70,7 @@ def test_legacy_v5_database_upgrades_without_losing_records(tmp_path):
         assert row[0] == 2
         assert connection.execute(
             "SELECT MAX(version) FROM schema_migrations"
-        ).fetchone()[0] == 8
+        ).fetchone()[0] == 9
 
 
 def test_patent_assignment_transaction_and_duplicate_constraints(repositories):

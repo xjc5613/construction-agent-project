@@ -45,7 +45,7 @@ def test_database_schema_rollback_and_full_text_search(repository):
     with repository.db.connect() as connection:
         assert connection.execute(
             "SELECT MAX(version) FROM schema_migrations"
-        ).fetchone()[0] == 8
+        ).fetchone()[0] == 9
         assert "item_id" in {
             row["name"] for row in connection.execute("PRAGMA table_info(evidence_items)")
         }

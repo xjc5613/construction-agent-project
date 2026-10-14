@@ -983,6 +983,159 @@ ALTER TABLE fusion_predictions ADD COLUMN probability_authority TEXT NOT NULL DE
     CHECK(probability_authority IN ('deterministic_model','validated_model'));
 """
 
+SCHEMA_V9 = """
+ALTER TABLE forecast_jobs ADD COLUMN job_mode TEXT NOT NULL DEFAULT 'legacy_read_only'
+    CHECK(job_mode IN ('thesis_evolution_forecast','ipc_fusion_discovery','legacy_read_only'));
+ALTER TABLE forecast_jobs ADD COLUMN evolution_packet_version_id TEXT;
+ALTER TABLE forecast_jobs ADD COLUMN run_manifest_json TEXT NOT NULL DEFAULT '{}';
+
+CREATE TABLE evolution_evidence_packets (
+    packet_version_id TEXT PRIMARY KEY,
+    packet_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK(version >= 1),
+    schema_version TEXT NOT NULL,
+    research_contract_version INTEGER NOT NULL DEFAULT 3,
+    baseline_year INTEGER NOT NULL DEFAULT 2025,
+    cutoff_date TEXT NOT NULL DEFAULT '2025-10-01',
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','reviewed','frozen')),
+    payload_json TEXT NOT NULL,
+    checksum TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TEXT,
+    frozen_at TEXT,
+    FOREIGN KEY(project_id) REFERENCES projects(project_id),
+    UNIQUE(packet_id,version)
+);
+
+CREATE TABLE evolution_evidence_sources (
+    packet_version_id TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
+    locator_json TEXT NOT NULL,
+    PRIMARY KEY(packet_version_id,source_id),
+    FOREIGN KEY(packet_version_id) REFERENCES evolution_evidence_packets(packet_version_id) ON DELETE CASCADE
+);
+
+CREATE TABLE evolution_evidence_records (
+    packet_version_id TEXT NOT NULL,
+    evidence_id TEXT NOT NULL,
+    evidence_kind TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    PRIMARY KEY(packet_version_id,evidence_id),
+    FOREIGN KEY(packet_version_id) REFERENCES evolution_evidence_packets(packet_version_id) ON DELETE CASCADE
+);
+
+CREATE TABLE evolution_evidence_attachments (
+    packet_version_id TEXT NOT NULL,
+    attachment_id TEXT NOT NULL,
+    mapping_state TEXT NOT NULL,
+    checksum TEXT NOT NULL DEFAULT '',
+    attachment_json TEXT NOT NULL,
+    PRIMARY KEY(packet_version_id,attachment_id),
+    FOREIGN KEY(packet_version_id) REFERENCES evolution_evidence_packets(packet_version_id) ON DELETE CASCADE
+);
+
+CREATE TABLE development_claim_versions (
+    claim_version_id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    packet_version_id TEXT NOT NULL,
+    claim_id TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK(version >= 1),
+    parent_version_id TEXT,
+    object_ids_json TEXT NOT NULL,
+    claim_type TEXT NOT NULL,
+    support_level TEXT NOT NULL,
+    status TEXT NOT NULL,
+    claim_json TEXT NOT NULL,
+    checksum TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(job_id) REFERENCES forecast_jobs(job_id),
+    FOREIGN KEY(packet_version_id) REFERENCES evolution_evidence_packets(packet_version_id),
+    FOREIGN KEY(parent_version_id) REFERENCES development_claim_versions(claim_version_id),
+    UNIQUE(job_id,claim_id,version),
+    UNIQUE(job_id,checksum)
+);
+
+CREATE TABLE claim_review_findings (
+    finding_id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    claim_version_id TEXT NOT NULL,
+    reviewer_role TEXT NOT NULL,
+    check_kind TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    finding_json TEXT NOT NULL,
+    closed_by_version_id TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    closed_at TEXT,
+    FOREIGN KEY(job_id) REFERENCES forecast_jobs(job_id),
+    FOREIGN KEY(claim_version_id) REFERENCES development_claim_versions(claim_version_id),
+    FOREIGN KEY(closed_by_version_id) REFERENCES development_claim_versions(claim_version_id)
+);
+
+CREATE TABLE claim_adjudications (
+    adjudication_id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    claim_version_id TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    adjudication_json TEXT NOT NULL,
+    checksum TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(job_id) REFERENCES forecast_jobs(job_id),
+    FOREIGN KEY(claim_version_id) REFERENCES development_claim_versions(claim_version_id),
+    UNIQUE(claim_version_id,checksum)
+);
+
+CREATE TABLE claim_terminal_states (
+    job_id TEXT NOT NULL,
+    claim_id TEXT NOT NULL,
+    claim_version_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(job_id,claim_id),
+    FOREIGN KEY(job_id) REFERENCES forecast_jobs(job_id),
+    FOREIGN KEY(claim_version_id) REFERENCES development_claim_versions(claim_version_id)
+);
+
+CREATE TABLE thesis_agent_call_traces (
+    call_id TEXT PRIMARY KEY,
+    job_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    claim_version_id TEXT,
+    prompt_manifest_id TEXT,
+    model_manifest_id TEXT,
+    input_checksum TEXT NOT NULL,
+    output_checksum TEXT NOT NULL DEFAULT '',
+    usage_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL,
+    error_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(job_id) REFERENCES forecast_jobs(job_id)
+);
+
+CREATE TABLE forecast_method_evaluations (
+    evaluation_id TEXT PRIMARY KEY,
+    packet_version_id TEXT NOT NULL,
+    manifest_json TEXT NOT NULL,
+    manifest_checksum TEXT NOT NULL UNIQUE,
+    results_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'not_run',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT,
+    FOREIGN KEY(packet_version_id) REFERENCES evolution_evidence_packets(packet_version_id)
+);
+
+CREATE INDEX idx_evolution_packets_project ON evolution_evidence_packets(project_id,packet_id,version DESC);
+CREATE INDEX idx_evolution_records_kind ON evolution_evidence_records(packet_version_id,evidence_kind);
+CREATE INDEX idx_claim_versions_job_object ON development_claim_versions(job_id,claim_id,version DESC);
+CREATE INDEX idx_findings_claim_status ON claim_review_findings(claim_version_id,status,severity);
+CREATE INDEX idx_adjudications_job ON claim_adjudications(job_id,created_at);
+CREATE INDEX idx_claim_states_job ON claim_terminal_states(job_id,status);
+CREATE INDEX idx_thesis_calls_job_role ON thesis_agent_call_traces(job_id,role,created_at);
+"""
+
 
 class LibraryDatabase:
     def __init__(self, path: Path = LIBRARY_DB_PATH):
@@ -1047,6 +1200,12 @@ class LibraryDatabase:
                 connection.executescript(SCHEMA_V8)
                 connection.execute(
                     "INSERT INTO schema_migrations(version) VALUES (8)"
+                )
+                version = 8
+            if version < 9:
+                connection.executescript(SCHEMA_V9)
+                connection.execute(
+                    "INSERT INTO schema_migrations(version) VALUES (9)"
                 )
             self._seed_taxonomy(connection)
 
