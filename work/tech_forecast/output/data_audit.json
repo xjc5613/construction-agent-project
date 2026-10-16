@@ -1,0 +1,17 @@
+{
+  "xlsx_rows_excluding_header": 5913,
+  "manuscript_reported_patents": 5926,
+  "difference": 13,
+  "analyzed_labeled_records_2015_2025": 5789,
+  "unique_patents_in_labeled_records": 5605,
+  "latest_year_partial": 2025,
+  "latest_data_cutoff_from_manuscript": "2025-10-01",
+  "trend_fit_years": "2018-2024",
+  "evidence_horizon": "2026 (2025 full-year and 2026 are model estimates, not observations)",
+  "notes": [
+    "2025 is treated as right-censored and excluded from trend fitting.",
+    "The 2025 full-year nowcast and 2026 forecast are model-derived evidence extensions with 80% exploratory intervals.",
+    "Topic 5 and Topic 9 use transparent keyword proxies because the workbook has no dedicated labels for these BERTopic topics.",
+    "Counts are patent activity signals, not de-duplicated global patent-family counts."
+  ]
+}
